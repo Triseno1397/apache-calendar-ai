@@ -1,0 +1,16 @@
+{
+  "name": "apache-calendar-ai",
+  "version": "1.0.0",
+  "description": "Scans the shared apachecalender@gmail.com inbox twice a day, uses the Anthropic API to read order email threads, and writes color-coded drop-off / pick-up events to Google Calendar.",
+  "private": true,
+  "scripts": {
+    "login": "clasp login",
+    "create": "clasp create --type standalone --title \"Apache Calendar AI\" --rootDir .",
+    "push": "clasp push",
+    "open": "clasp open",
+    "logs": "clasp logs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

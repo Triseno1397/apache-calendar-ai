@@ -1,0 +1,6 @@
+# Push ONLY the manifest and the script source to Apps Script.
+# Everything is ignored first, then we un-ignore what should upload.
+**/**
+
+!appsscript.json
+!src/**

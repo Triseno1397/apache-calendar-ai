@@ -1,0 +1,14 @@
+# clasp local project link — contains your scriptId, keep it out of git
+.clasp.json
+
+# clasp auth credentials (if ever created in-project)
+.clasprc.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
