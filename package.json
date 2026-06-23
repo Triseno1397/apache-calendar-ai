@@ -7,7 +7,7 @@
     "login": "clasp login",
     "create": "clasp create --type standalone --title \"Apache Calendar AI\" --rootDir .",
     "push": "clasp push",
-    "open": "clasp open",
+    "open": "clasp open-script",
     "logs": "clasp logs"
   },
   "devDependencies": {

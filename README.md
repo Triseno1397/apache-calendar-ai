@@ -68,7 +68,8 @@ package.json         npm scripts for the clasp workflow
 3. **Log in**: `clasp login` → sign in as **apachecalender@gmail.com**.
 4. **Create the project**: `clasp create --type standalone --title "Apache Calendar AI" --rootDir .`
    (or `npm run create`). This generates `.clasp.json` (already git-ignored).
-5. **Push & open**: `clasp push` then `clasp open` (or `npm run push` / `npm run open`).
+5. **Push & open**: `clasp push` then `clasp open-script` (or `npm run push` /
+   `npm run open`). *(clasp v3 renamed `clasp open` → `clasp open-script`.)*
 
 ## Post-deploy checklist (inside your Google account)
 
