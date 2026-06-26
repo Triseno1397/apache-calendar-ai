@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Apache Rental — Jobs</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --line:#e2e8f0; --soft:#f1f5f9; --drop:#1d4ed8; --pick:#15803d;
+      --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;background:var(--soft);color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    header{position:sticky;top:0;z-index:20;background:var(--bg);color:#fff;
+      padding:calc(12px + var(--safe-top)) 16px 12px}
+    .brand{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .brand h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px}
+    .brand .sub{font-size:12px;color:#94a3b8;margin-top:2px}
+    .iconbtn{background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:10px;
+      width:38px;height:38px;font-size:17px;cursor:pointer;display:grid;place-items:center}
+    .iconbtn:active{background:rgba(255,255,255,.25)}
+    .toggle{display:flex;background:rgba(255,255,255,.12);border-radius:10px;padding:3px;margin-top:12px}
+    .toggle button{flex:1;border:none;background:transparent;color:#cbd5e1;font-size:14px;
+      font-weight:600;padding:8px;border-radius:8px;cursor:pointer}
+    .toggle button.on{background:#fff;color:var(--ink)}
+    main{padding:14px 14px calc(28px + var(--safe-bot));max-width:680px;margin:0 auto}
+
+    .daygroup{margin:18px 0 8px}
+    .daygroup:first-child{margin-top:6px}
+    .dayhdr{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.6px;margin:0 4px 8px;display:flex;align-items:baseline;gap:8px}
+    .dayhdr .rel{color:var(--ink)}
+    .dayhdr.today .rel{color:var(--drop)}
+
+    .card{background:var(--panel);border:1px solid var(--line);border-left:5px solid #94a3b8;
+      border-radius:14px;padding:13px 14px;margin:8px 0;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+    .row1{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .chip{font-size:12px;font-weight:800;letter-spacing:.4px;padding:4px 9px;border-radius:999px;color:#fff;white-space:nowrap}
+    .chip.drop{background:var(--drop)} .chip.pick{background:var(--pick)}
+    .time{font-size:15px;font-weight:700}
+    .time.tbd{color:var(--muted);font-weight:600;font-size:13px}
+    .job{font-size:17px;font-weight:700;margin:9px 0 2px;line-height:1.25}
+    .meta{font-size:14px;color:var(--ink);margin:3px 0;display:flex;gap:7px}
+    .meta .k{color:var(--muted);min-width:18px;text-align:center}
+    .notes{background:var(--soft);border-radius:9px;padding:8px 10px;margin-top:9px;
+      font-size:13.5px;color:#334155;line-height:1.4}
+    .legend{font-size:12px;color:var(--muted);margin:2px 4px 0}
+
+    /* month grid */
+    .monthbar{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 10px}
+    .monthbar .mtitle{font-size:16px;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+    .gh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding:2px 0}
+    .cell{aspect-ratio:1/1.05;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+      padding:5px 4px;display:flex;flex-direction:column;gap:3px;cursor:pointer;overflow:hidden}
+    .cell.empty{background:transparent;border:none;cursor:default}
+    .cell .dn{font-size:12px;font-weight:700;color:#334155}
+    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;width:21px;height:21px;
+      display:grid;place-items:center}
+    .cell.sel{outline:2px solid var(--drop);outline-offset:0}
+    .dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:auto}
+    .dot{width:7px;height:7px;border-radius:50%}
+    .cell .more{font-size:9px;color:var(--muted)}
+
+    .empty-state{text-align:center;color:var(--muted);padding:60px 20px}
+    .empty-state .big{font-size:40px;margin-bottom:10px}
+    .spin{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--drop);
+      border-radius:50%;animation:r .8s linear infinite;margin:60px auto}
+    @keyframes r{to{transform:rotate(360deg)}}
+    .err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:12px;
+      padding:14px;margin:20px 4px;font-size:14px}
+    .err button{margin-top:8px;background:#991b1b;color:#fff;border:none;border-radius:8px;
+      padding:8px 14px;font-weight:600;cursor:pointer}
+
+    /* add-to-home sheet */
+    .scrim{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:40}
+    .scrim.show{display:block}
+    .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:#fff;
+      border-radius:18px 18px 0 0;padding:18px 18px calc(22px + var(--safe-bot));
+      transform:translateY(100%);transition:transform .25s ease;max-width:680px;margin:0 auto}
+    .sheet.show{transform:translateY(0)}
+    .sheet h3{margin:2px 0 12px;font-size:17px}
+    .sheet .grab{width:40px;height:4px;background:var(--line);border-radius:2px;margin:0 auto 14px}
+    .step{font-size:14px;color:#334155;margin:7px 0;line-height:1.45}
+    .plat{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.5px;margin:14px 0 2px}
+    .sheet .close{width:100%;margin-top:16px;background:var(--bg);color:#fff;border:none;
+      border-radius:11px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div>
+        <h1>Apache Rental — Jobs</h1>
+        <div class="sub" id="sub">Loading…</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="iconbtn" id="homeBtn" title="Add to phone">📱</button>
+        <button class="iconbtn" id="refreshBtn" title="Refresh">⟳</button>
+      </div>
+    </div>
+    <div class="toggle">
+      <button id="tList" class="on">List</button>
+      <button id="tMonth">Month</button>
+    </div>
+  </header>
+
+  <main id="main"><div class="spin"></div></main>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3>📱 Add this to your home screen</h3>
+    <div class="plat">iPhone (Safari)</div>
+    <div class="step">1. Tap the <b>Share</b> button (□ with ↑) at the bottom.</div>
+    <div class="step">2. Scroll down and tap <b>Add to Home Screen</b>.</div>
+    <div class="step">3. Tap <b>Add</b> — an icon appears like an app.</div>
+    <div class="plat">Android (Chrome)</div>
+    <div class="step">1. Tap the <b>⋮</b> menu (top-right).</div>
+    <div class="step">2. Tap <b>Add to Home screen</b> (or <b>Install app</b>).</div>
+    <div class="step">3. Tap <b>Add</b> — opens like an app from your home screen.</div>
+    <button class="close" id="sheetClose">Got it</button>
+  </div>
+
+  <script>
+    var PALETTE = ['#2563eb','#16a34a','#9333ea','#dc2626','#ca8a04',
+                   '#ea580c','#0891b2','#4f46e5','#0d9488','#be123c'];
+    var WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var MO = ['January','February','March','April','May','June','July',
+              'August','September','October','November','December'];
+
+    var state = { jobs: [], occ: [], view: 'list', month: null };
+
+    // ---------- helpers ----------
+    function pad(n){ return (n<10?'0':'')+n; }
+    function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+    function parseYMD(s){ var p=s.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+    function todayStr(){ return ymd(new Date()); }
+    function colorFor(name){
+      var s=(name||'').toLowerCase(), h=0;
+      for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))%100000;
+      return PALETTE[h%PALETTE.length];
+    }
+    function fmtTime(t){
+      if(!t) return '';
+      var p=t.split(':'), h=+p[0], m=p[1];
+      var ap=h<12?'AM':'PM', h12=h%12; if(h12===0)h12=12;
+      return h12+':'+m+' '+ap;
+    }
+    function relLabel(s){
+      var t=todayStr();
+      if(s===t) return 'Today';
+      var d=parseYMD(s), tw=parseYMD(t);
+      var diff=Math.round((d-tw)/86400000);
+      if(diff===1) return 'Tomorrow';
+      if(diff===-1) return 'Yesterday';
+      return WD[d.getDay()];
+    }
+    function longDate(s){
+      var d=parseYMD(s);
+      return WD[d.getDay()]+', '+MO[d.getMonth()].slice(0,3)+' '+d.getDate();
+    }
+
+    // ---------- data ----------
+    function buildOccurrences(jobs){
+      var occ=[];
+      jobs.forEach(function(j){
+        if(j.dropOffDate) occ.push({type:'dropoff',date:j.dropOffDate,time:j.dropOffTime,job:j});
+        if(j.pickUpDate)  occ.push({type:'pickup', date:j.pickUpDate, time:j.pickUpTime, job:j});
+      });
+      occ.sort(function(a,b){
+        var ka=a.date+(a.time||'24:00'), kb=b.date+(b.time||'24:00');
+        return ka<kb?-1:ka>kb?1:0;
+      });
+      return occ;
+    }
+
+    function load(){
+      document.getElementById('main').innerHTML='<div class="spin"></div>';
+      document.getElementById('sub').textContent='Loading…';
+      google.script.run
+        .withSuccessHandler(onData)
+        .withFailureHandler(onErr)
+        .getJobs();
+    }
+    function onData(res){
+      state.jobs=(res&&res.jobs)||[];
+      state.occ=buildOccurrences(state.jobs);
+      var n=state.jobs.length;
+      document.getElementById('sub').textContent=
+        n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(new Date().getHours())+':'+pad(new Date().getMinutes()));
+      render();
+    }
+    function onErr(e){
+      document.getElementById('main').innerHTML=
+        '<div class="err">Couldn\'t load jobs.<br>'+(e&&e.message?e.message:e)+
+        '<br><button onclick="load()">Try again</button></div>';
+      document.getElementById('sub').textContent='Error';
+    }
+
+    // ---------- render ----------
+    function render(){ state.view==='list'?renderList():renderMonth(); }
+
+    function card(o){
+      var j=o.job, c=colorFor(j.job), drop=o.type==='dropoff';
+      var html='<div class="card" style="border-left-color:'+c+'">';
+      html+='<div class="row1"><span class="chip '+(drop?'drop':'pick')+'">'+
+            (drop?'📦 DROP OFF':'📥 PICK UP')+'</span>';
+      html+= o.time ? '<span class="time">'+fmtTime(o.time)+'</span>'
+                    : '<span class="time tbd">time TBD</span>';
+      html+='</div>';
+      html+='<div class="job">'+esc(j.job||'Untitled job')+'</div>';
+      if(j.venue) html+='<div class="meta"><span class="k">📍</span><span>'+esc(j.venue)+'</span></div>';
+      var other = drop
+        ? (j.pickUpDate ? 'Pick-up '+longDate(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'') : 'Pick-up TBD')
+        : (j.dropOffDate? 'Drop-off '+longDate(j.dropOffDate)+(j.dropOffTime?' · '+fmtTime(j.dropOffTime):'') : 'Drop-off TBD');
+      html+='<div class="meta"><span class="k">'+(drop?'📥':'📦')+'</span><span style="color:var(--muted)">'+other+'</span></div>';
+      if(j.showDates) html+='<div class="meta"><span class="k">🎬</span><span>'+esc(j.showDates)+'</span></div>';
+      if(j.notes) html+='<div class="notes">📝 '+esc(j.notes)+'</div>';
+      html+='</div>';
+      return html;
+    }
+
+    function renderList(){
+      var occ=state.occ, t=todayStr();
+      var upcoming=occ.filter(function(o){return o.date>=t;});
+      var past=occ.filter(function(o){return o.date<t;});
+      if(!occ.length){ return empty(); }
+
+      var html='';
+      if(upcoming.length){
+        var day=null;
+        upcoming.forEach(function(o){
+          if(o.date!==day){
+            if(day!==null) html+='</div>';
+            day=o.date;
+            html+='<div class="daygroup"><div class="dayhdr'+(o.date===t?' today':'')+'">'+
+                  '<span class="rel">'+relLabel(o.date)+'</span><span>'+longDate(o.date)+'</span></div>';
+          }
+          html+=card(o);
+        });
+        html+='</div>';
+      } else {
+        html+='<div class="empty-state"><div class="big">📭</div>No upcoming jobs.</div>';
+      }
+
+      if(past.length){
+        html+='<div class="legend" style="margin-top:22px"><button class="iconbtn" '+
+              'style="background:#e2e8f0;color:#334155;width:auto;height:auto;padding:8px 14px;'+
+              'border-radius:9px;font-size:13px;font-weight:600" onclick="togglePast()">'+
+              '↓ '+past.length+' past job event'+(past.length===1?'':'s')+'</button></div>';
+        html+='<div id="pastWrap" style="display:none">';
+        var pday=null;
+        past.forEach(function(o){
+          if(o.date!==pday){
+            if(pday!==null) html+='</div>';
+            pday=o.date;
+            html+='<div class="daygroup"><div class="dayhdr"><span class="rel">'+
+                  relLabel(o.date)+'</span><span>'+longDate(o.date)+'</span></div>';
+          }
+          html+=card(o);
+        });
+        html+='</div></div>';
+      }
+      document.getElementById('main').innerHTML=html;
+    }
+
+    function togglePast(){
+      var w=document.getElementById('pastWrap');
+      if(w) w.style.display = w.style.display==='none' ? 'block' : 'none';
+    }
+
+    function renderMonth(){
+      if(!state.month){
+        // start on the month of the nearest upcoming job, else this month
+        var t=todayStr(), up=state.occ.filter(function(o){return o.date>=t;});
+        var base = up.length ? parseYMD(up[0].date) : new Date();
+        state.month={y:base.getFullYear(),m:base.getMonth()};
+      }
+      var y=state.month.y, m=state.month.m;
+      var byDate={};
+      state.occ.forEach(function(o){ (byDate[o.date]=byDate[o.date]||[]).push(o); });
+
+      var first=new Date(y,m,1), startWd=first.getDay(), days=new Date(y,m+1,0).getDate();
+      var t=todayStr();
+
+      var html='<div class="monthbar">'+
+        '<button class="iconbtn" style="background:#e2e8f0;color:#334155" onclick="moveMonth(-1)">‹</button>'+
+        '<div class="mtitle">'+MO[m]+' '+y+'</div>'+
+        '<button class="iconbtn" style="background:#e2e8f0;color:#334155" onclick="moveMonth(1)">›</button></div>';
+      html+='<div class="grid">';
+      WD.forEach(function(d){ html+='<div class="gh">'+d[0]+'</div>'; });
+      for(var i=0;i<startWd;i++) html+='<div class="cell empty"></div>';
+      for(var day=1;day<=days;day++){
+        var ds=y+'-'+pad(m+1)+'-'+pad(day), list=byDate[ds]||[];
+        var dots='';
+        list.slice(0,4).forEach(function(o){
+          dots+='<span class="dot" style="background:'+colorFor(o.job.job)+'"></span>';
+        });
+        var more=list.length>4?'<span class="more">+'+(list.length-4)+'</span>':'';
+        html+='<div class="cell'+(ds===t?' today':'')+(ds===state.selDay?' sel':'')+'" '+
+              'onclick="selDay(\''+ds+'\')"><span class="dn">'+day+'</span>'+
+              '<div class="dots">'+dots+more+'</div></div>';
+      }
+      html+='</div>';
+
+      var sel=state.selDay&&byDate[state.selDay];
+      if(sel&&sel.length){
+        html+='<div class="daygroup" style="margin-top:18px"><div class="dayhdr'+
+              (state.selDay===t?' today':'')+'"><span class="rel">'+relLabel(state.selDay)+
+              '</span><span>'+longDate(state.selDay)+'</span></div>';
+        sel.forEach(function(o){ html+=card(o); });
+        html+='</div>';
+      } else {
+        html+='<div class="legend" style="text-align:center;margin-top:18px">Tap a day to see its jobs.</div>';
+      }
+      document.getElementById('main').innerHTML=html;
+    }
+    function moveMonth(d){
+      var m=state.month.m+d, y=state.month.y;
+      if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+      state.month={y:y,m:m}; state.selDay=null; renderMonth();
+    }
+    function selDay(ds){ state.selDay=(state.selDay===ds?null:ds); renderMonth(); }
+
+    function empty(){
+      document.getElementById('main').innerHTML=
+        '<div class="empty-state"><div class="big">🗓️</div>No jobs scheduled yet.<br>'+
+        'They\'ll appear here automatically as order emails come in.</div>';
+    }
+    function esc(s){ return String(s).replace(/[&<>"]/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+    // ---------- ui wiring ----------
+    function setView(v){
+      state.view=v;
+      document.getElementById('tList').className = v==='list'?'on':'';
+      document.getElementById('tMonth').className= v==='month'?'on':'';
+      render();
+    }
+    document.getElementById('tList').onclick=function(){setView('list');};
+    document.getElementById('tMonth').onclick=function(){setView('month');};
+    document.getElementById('refreshBtn').onclick=load;
+    function showSheet(b){ document.getElementById('scrim').className=b?'scrim show':'scrim';
+      document.getElementById('sheet').className=b?'sheet show':'sheet'; }
+    document.getElementById('homeBtn').onclick=function(){showSheet(true);};
+    document.getElementById('sheetClose').onclick=function(){showSheet(false);};
+    document.getElementById('scrim').onclick=function(){showSheet(false);};
+
+    // refresh when the tab/app is reopened
+    document.addEventListener('visibilitychange',function(){
+      if(!document.hidden) load();
+    });
+
+    load();
+  </script>
+</body>
+</html>
