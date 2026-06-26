@@ -90,6 +90,20 @@
       letter-spacing:.5px;margin:14px 0 2px}
     .sheet .close{width:100%;margin-top:16px;background:var(--bg);color:#fff;border:none;
       border-radius:11px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+
+    .scanbar{margin-top:10px}
+    .scanbar button{width:100%;border:none;border-radius:11px;padding:12px;font-size:15px;
+      font-weight:700;color:#fff;background:#2563eb;cursor:pointer;display:flex;
+      align-items:center;justify-content:center;gap:8px}
+    .scanbar button:active{background:#1d4ed8}
+    .scanbar button:disabled{background:#64748b;cursor:default}
+    .miniSpin{width:16px;height:16px;border:2px solid rgba(255,255,255,.5);border-top-color:#fff;
+      border-radius:50%;animation:r .8s linear infinite}
+    .toast{position:fixed;left:50%;bottom:calc(22px + var(--safe-bot));
+      transform:translateX(-50%) translateY(20px);background:#0f172a;color:#fff;padding:12px 18px;
+      border-radius:12px;font-size:14px;font-weight:600;max-width:90%;text-align:center;opacity:0;
+      pointer-events:none;transition:all .25s ease;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   </style>
 </head>
 <body>
@@ -107,6 +121,9 @@
     <div class="toggle">
       <button id="tList" class="on">List</button>
       <button id="tMonth">Month</button>
+    </div>
+    <div class="scanbar">
+      <button id="scanBtn">🔍 Scan emails for new jobs</button>
     </div>
   </header>
 
@@ -126,6 +143,8 @@
     <div class="step">3. Tap <b>Add</b> — opens like an app from your home screen.</div>
     <button class="close" id="sheetClose">Got it</button>
   </div>
+
+  <div class="toast" id="toast"></div>
 
   <script>
     var PALETTE = ['#2563eb','#16a34a','#9333ea','#dc2626','#ca8a04',
@@ -191,9 +210,7 @@
     function onData(res){
       state.jobs=(res&&res.jobs)||[];
       state.occ=buildOccurrences(state.jobs);
-      var n=state.jobs.length;
-      document.getElementById('sub').textContent=
-        n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(new Date().getHours())+':'+pad(new Date().getMinutes()));
+      document.getElementById('sub').textContent=subText(state.jobs.length);
       render();
     }
     function onErr(e){
@@ -351,6 +368,43 @@
     document.getElementById('homeBtn').onclick=function(){showSheet(true);};
     document.getElementById('sheetClose').onclick=function(){showSheet(false);};
     document.getElementById('scrim').onclick=function(){showSheet(false);};
+
+    // ---------- scan + toast ----------
+    var toastTimer=null;
+    function toast(msg){
+      var el=document.getElementById('toast');
+      el.textContent=msg; el.className='toast show';
+      if(toastTimer) clearTimeout(toastTimer);
+      toastTimer=setTimeout(function(){ el.className='toast'; }, 4500);
+    }
+    function subText(n){
+      var t=new Date();
+      return n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(t.getHours())+':'+pad(t.getMinutes()));
+    }
+    function setScanning(on){
+      var b=document.getElementById('scanBtn');
+      b.disabled=on;
+      b.innerHTML = on ? '<span class="miniSpin"></span> Scanning emails… (10–30s)'
+                       : '🔍 Scan emails for new jobs';
+    }
+    function scan(){
+      setScanning(true);
+      toast('Reading the inbox with AI…');
+      google.script.run.withSuccessHandler(onScan).withFailureHandler(onScanErr).scanNow();
+    }
+    function onScan(res){
+      setScanning(false);
+      state.jobs=(res&&res.jobs)||[];
+      state.occ=buildOccurrences(state.jobs);
+      document.getElementById('sub').textContent=subText(state.jobs.length);
+      render();
+      toast(res&&res.message ? res.message : 'Scan complete');
+    }
+    function onScanErr(e){
+      setScanning(false);
+      toast('Scan failed: '+((e&&e.message)?e.message:e));
+    }
+    document.getElementById('scanBtn').onclick=scan;
 
     // refresh when the tab/app is reopened
     document.addEventListener('visibilitychange',function(){

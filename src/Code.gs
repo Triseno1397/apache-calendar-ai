@@ -47,14 +47,19 @@ function setup() {
 }
 
 
-/** Main loop — what the triggers call. */
+/**
+ * Main loop — what the triggers and the "Scan emails" button call.
+ * Reads the inbox directly (plus anything labeled Orders), so order emails
+ * are processed without needing to be labeled by hand. Returns a summary.
+ */
 function processOrderEmails() {
-  var source = GmailApp.getUserLabelByName(CONFIG.SOURCE_LABEL);
-  if (!source) { Logger.log('Run setup() first.'); return; }
   var review = GmailApp.getUserLabelByName(CONFIG.REVIEW_LABEL);
+  if (!review) { Logger.log('Run setup() first.'); return { synced: 0, review: 0, errors: 0, scanned: 0 }; }
+  var source = GmailApp.getUserLabelByName(CONFIG.SOURCE_LABEL);
   var cal = getCalendar();
 
-  var threads = source.getThreads(0, CONFIG.MAX_THREADS_PER_RUN);
+  var threads = collectThreads(source);
+  var summary = { synced: 0, review: 0, errors: 0, scanned: threads.length };
 
   threads.forEach(function (thread) {
     var id = thread.getId();
@@ -74,20 +79,35 @@ function processOrderEmails() {
         thread.addLabel(review);
         // remember count so we don't reparse until a NEW reply arrives
         saveState(id, { msgCount: msgCount, review: true, events: (state && state.events) || {} });
+        summary.review++;
         return;
       }
 
       thread.removeLabel(review); // clear any prior flag now that we have dates
       var events = syncEvents(cal, order, thread, (state && state.events) || {});
       saveState(id, { msgCount: msgCount, review: false, events: events, jobName: order.job_name });
+      summary.synced++;
       Logger.log('Synced: ' + order.job_name);
 
     } catch (err) {
       Logger.log('Error (will retry next run): ' + err + ' | ' + thread.getFirstMessageSubject());
       thread.addLabel(review);
+      summary.errors++;
       // do NOT save msgCount on error, so transient failures retry next run
     }
   });
+
+  Logger.log('Scan summary: ' + JSON.stringify(summary));
+  return summary;
+}
+
+/** Candidate threads = current inbox + anything already labeled Orders (deduped). */
+function collectThreads(source) {
+  var seen = {}, out = [];
+  function add(t) { var id = t.getId(); if (!seen[id]) { seen[id] = true; out.push(t); } }
+  GmailApp.getInboxThreads(0, CONFIG.MAX_THREADS_PER_RUN).forEach(add);
+  if (source) source.getThreads(0, CONFIG.MAX_THREADS_PER_RUN).forEach(add);
+  return out;
 }
 
 

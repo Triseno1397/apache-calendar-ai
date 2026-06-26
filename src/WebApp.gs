@@ -70,6 +70,47 @@ function getJobs() {
   return { jobs: jobs, generatedAt: new Date().toISOString() };
 }
 
+/**
+ * Triggered by the "Scan emails" button in the web app. Runs the AI pass over
+ * the inbox right now, then returns the refreshed jobs + a human summary.
+ * A script lock prevents two scans from overlapping (double-taps, two users).
+ */
+function scanNow() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(2000)) {
+    var busy = getJobs();
+    busy.message = 'A scan is already running — give it a few seconds, then refresh.';
+    busy.scanned = false;
+    return busy;
+  }
+  try {
+    var summary = processOrderEmails();
+    var res = getJobs();
+    res.scan = summary;
+    res.scanned = true;
+    res.message = scanMessage(summary);
+    return res;
+  } catch (err) {
+    var out = getJobs();
+    out.message = 'Scan error: ' + (err && err.message ? err.message : err);
+    out.scanned = false;
+    return out;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Turn a scan summary into a short, friendly status line for the UI. */
+function scanMessage(s) {
+  if (!s) return 'Scan complete.';
+  if (!s.synced && !s.review && !s.errors) return 'No new jobs found.';
+  var parts = [];
+  if (s.synced) parts.push(s.synced + ' job' + (s.synced === 1 ? '' : 's') + ' added/updated');
+  if (s.review) parts.push(s.review + ' need' + (s.review === 1 ? 's' : '') + ' review');
+  if (s.errors) parts.push(s.errors + ' error' + (s.errors === 1 ? '' : 's'));
+  return parts.join(' · ');
+}
+
 /** Parse 'Key: value' lines from an event description into a map. */
 function parseEventDescription(desc) {
   var out = {};
