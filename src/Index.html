@@ -97,15 +97,17 @@
     .monthbar .mtitle{font-size:16px;font-weight:700}
     .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
     .gh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding:2px 0}
-    .cell{aspect-ratio:1/1.05;background:var(--panel);border:1px solid var(--line);border-radius:10px;
-      padding:5px 4px;display:flex;flex-direction:column;gap:3px;cursor:pointer;overflow:hidden}
+    .cell{min-height:84px;background:var(--panel);border:1px solid var(--line);border-radius:9px;
+      padding:5px 3px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden}
     .cell.empty{background:transparent;border:none;cursor:default}
-    .cell .dn{font-size:12px;font-weight:700;color:#334155}
-    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;width:21px;height:21px;display:grid;place-items:center}
+    .cell.urgent{border-color:#fca5a5;box-shadow:inset 0 0 0 1px #fca5a5}
+    .cell .dn{font-size:13px;font-weight:700;color:#334155;align-self:flex-start}
+    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;min-width:22px;height:22px;
+      display:grid;place-items:center;padding:0 5px}
     .cell.sel{outline:2px solid var(--drop)}
-    .dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:auto}
-    .dot{width:7px;height:7px;border-radius:50%}
-    .cell .more{font-size:9px;color:var(--muted)}
+    .ebar{font-size:9.5px;line-height:1.55;color:#fff;border-radius:4px;padding:0 4px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;font-weight:700}
+    .cell .more{font-size:9px;color:var(--muted);font-weight:700;padding-left:3px}
 
     /* sheets / modals */
     .scrim{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:40}
@@ -162,8 +164,7 @@
       </div>
     </div>
     <div class="toggle">
-      <button id="tList" class="on">List</button>
-      <button id="tMonth">Month</button>
+      <button id="tMonth" class="on">Calendar</button>
       <button id="tReview">Review<span class="badge" id="revBadge" style="display:none">0</span></button>
     </div>
     <div class="actions">
@@ -250,7 +251,7 @@
               'August','September','October','November','December'];
     var PRANK = { Urgent:0, High:1, Normal:2, Low:3 };
 
-    var state = { jobs:[], occ:[], review:[], view:'list', month:null, selDay:null, editing:null, selColor:'' };
+    var state = { jobs:[], occ:[], review:[], view:'month', month:null, selDay:null, editing:null, selColor:'' };
 
     // ---------- helpers ----------
     function $(id){ return document.getElementById(id); }
@@ -278,6 +279,7 @@
     function longDate(s){ var d=parseYMD(s); return WD[d.getDay()]+', '+MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }
     function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function subText(n){ var t=new Date(); return n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(t.getHours())+':'+pad(t.getMinutes())); }
+    function revDate(iso){ try{ var d=new Date(iso); return MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }catch(e){ return ''; } }
 
     // ---------- data ----------
     function buildOccurrences(jobs){
@@ -323,9 +325,8 @@
 
     // ---------- render ----------
     function render(){
-      if(state.view==='list') renderList();
-      else if(state.view==='month') renderMonth();
-      else renderReview();
+      if(state.view==='review') renderReview();
+      else renderMonth();
     }
 
     function card(o){
@@ -417,11 +418,14 @@
       WD.forEach(function(d){ html+='<div class="gh">'+d[0]+'</div>'; });
       for(var i=0;i<startWd;i++) html+='<div class="cell empty"></div>';
       for(var day=1;day<=days;day++){
-        var ds=y+'-'+pad(m+1)+'-'+pad(day), list=byDate[ds]||[], dots='';
-        list.slice(0,4).forEach(function(o){ dots+='<span class="dot" style="background:'+accent(o.job)+'"></span>'; });
-        var more=list.length>4?'<span class="more">+'+(list.length-4)+'</span>':'';
-        html+='<div class="cell'+(ds===t?' today':'')+(ds===state.selDay?' sel':'')+'" onclick="selDay(\''+ds+'\')">'+
-          '<span class="dn">'+day+'</span><div class="dots">'+dots+more+'</div></div>';
+        var ds=y+'-'+pad(m+1)+'-'+pad(day), list=byDate[ds]||[], bars='', urgent=false;
+        list.slice(0,3).forEach(function(o){
+          if(o.job.priority==='Urgent') urgent=true;
+          bars+='<div class="ebar" style="background:'+accent(o.job)+'">'+esc(o.job.job)+'</div>';
+        });
+        if(list.length>3) bars+='<div class="more">+'+(list.length-3)+' more</div>';
+        html+='<div class="cell'+(ds===t?' today':'')+(ds===state.selDay?' sel':'')+(urgent?' urgent':'')+
+          '" onclick="selDay(\''+ds+'\')"><span class="dn">'+day+'</span>'+bars+'</div>';
       }
       html+='</div>';
       var sel=state.selDay&&byDate[state.selDay];
@@ -440,10 +444,13 @@
       if(!state.review.length) return empty('✅','Nothing needs review.','Emails the AI can’t place show up here.');
       var html='<div class="section-title">📬 Needs review — AI couldn’t place these</div>';
       state.review.forEach(function(r,i){
+        var link = r.permalink
+          ? '<a class="rbtn" style="background:#334155;text-decoration:none;display:inline-block;margin-right:8px" href="'+esc(r.permalink)+'" target="_blank">✉️ Open email</a>'
+          : '';
         html+='<div class="rcard"><div class="rsub">'+esc(r.subject)+'</div>'+
-          '<div class="rfrom">'+esc(r.from)+'</div>'+
+          '<div class="rfrom">'+esc(r.from)+' · '+revDate(r.date)+'</div>'+
           '<div class="rsnip">'+esc(r.snippet)+'…</div>'+
-          '<button class="rbtn" onclick="addFromReview('+i+')">➕ Create job from this</button></div>';
+          link+'<button class="rbtn" onclick="addFromReview('+i+')">➕ Create job</button></div>';
       });
       $('main').innerHTML=html;
     }
@@ -457,10 +464,9 @@
     // ---------- tabs ----------
     function setView(v){
       state.view=v;
-      $('tList').className=v==='list'?'on':''; $('tMonth').className=v==='month'?'on':''; $('tReview').className=v==='review'?'on':'';
+      $('tMonth').className=v==='month'?'on':''; $('tReview').className=v==='review'?'on':'';
       render();
     }
-    $('tList').onclick=function(){setView('list');};
     $('tMonth').onclick=function(){setView('month');};
     $('tReview').onclick=function(){setView('review');};
     $('refreshBtn').onclick=load;

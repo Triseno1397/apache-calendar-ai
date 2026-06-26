@@ -108,7 +108,8 @@ function getReview() {
       subject: t.getFirstMessageSubject() || '(no subject)',
       from: m ? m.getFrom() : '',
       date: t.getLastMessageDate().toISOString(),
-      snippet: (m ? m.getPlainBody() : '').replace(/\s+/g, ' ').slice(0, 220)
+      snippet: (m ? m.getPlainBody() : '').replace(/\s+/g, ' ').slice(0, 220),
+      permalink: t.getPermalink()   // direct Gmail link — no AI, just metadata
     };
   });
   return { items: items };
