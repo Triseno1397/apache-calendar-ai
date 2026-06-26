@@ -107,6 +107,7 @@ function getReview() {
     return {
       subject: t.getFirstMessageSubject() || '(no subject)',
       from: m ? m.getFrom() : '',
+      id: t.getId(),
       date: t.getLastMessageDate().toISOString(),
       snippet: (m ? m.getPlainBody() : '').replace(/\s+/g, ' ').slice(0, 220),
       permalink: t.getPermalink()   // direct Gmail link — no AI, just metadata
@@ -135,6 +136,7 @@ function scanNow() {
     var res = getJobs();
     res.scan = summary;
     res.scanned = true;
+    res.review = getReview().items;
     res.message = scanMessage(summary);
     return res;
   } catch (err) {
@@ -166,6 +168,7 @@ function createJob(data, pin) {
   var cal = getCalendar();
   var ref = 'm-' + Utilities.getUuid();
   writeJobEvents(cal, data, ref, {});
+  if (data.reviewThreadId) unflagThread(data.reviewThreadId); // created from a review item
   return afterMutation('Added: ' + (data.job || 'Untitled job'));
 }
 
@@ -186,9 +189,49 @@ function deleteJob(data, pin) {
   return afterMutation('Removed: ' + (data.job || 'job'));
 }
 
-/** Refreshed jobs + a status message, returned after any manual change. */
+// ---- Needs Review actions ----
+
+/** "Dismiss" — clear the review flag; the email stays in Gmail. */
+function dismissReview(payload, pin) {
+  requirePin(pin);
+  unflagThread(payload && payload.threadId);
+  return afterMutation('Dismissed from review.');
+}
+
+/** "Remove" — move the email thread to Trash (recoverable for 30 days). */
+function removeReviewEmail(payload, pin) {
+  requirePin(pin);
+  var t = (payload && payload.threadId) ? GmailApp.getThreadById(payload.threadId) : null;
+  if (t) t.moveToTrash();
+  return afterMutation('Email moved to Trash.');
+}
+
+/** "Add to job" — append this email to an existing job's notes, then dismiss it. */
+function addReviewToJob(payload, pin) {
+  requirePin(pin);
+  var cal = getCalendar();
+  var d = payload.job || {};
+  if (payload.note) d.notes = (d.notes ? d.notes + '\n\n' : '') + payload.note;
+  var ref = d.ref || ('m-' + Utilities.getUuid());
+  writeJobEvents(cal, d, ref, { dropoff: d.dropOffEventId, pickup: d.pickUpEventId });
+  if (payload.threadId) unflagThread(payload.threadId);
+  return afterMutation('Added to “' + (d.job || 'job') + '”.');
+}
+
+/** Clear the Review label on a thread + remember it so a scan won't re-flag it. */
+function unflagThread(id) {
+  if (!id) return;
+  var t = GmailApp.getThreadById(id);
+  if (!t) return;
+  var label = GmailApp.getUserLabelByName(CONFIG.REVIEW_LABEL);
+  if (label) t.removeLabel(label);
+  saveState(id, { msgCount: t.getMessageCount(), review: false, dismissed: true, events: {} });
+}
+
+/** Refreshed jobs + review + a status message, returned after any change. */
 function afterMutation(msg) {
   var res = getJobs();
+  res.review = getReview().items;
   res.message = msg;
   res.scanned = false;
   return res;
