@@ -306,6 +306,53 @@ function requirePin(pin) {
 }
 
 
+// ============== CREW (share the calendar to people's own devices) ==============
+
+/** Which calendar to share (matches the one events are written to). */
+function calId() {
+  return CONFIG.CALENDAR_ID === 'primary' ? 'primary' : CONFIG.CALENDAR_ID;
+}
+
+/** People the Apache calendar is shared with (so it syncs to their own Google Calendar). */
+function getCrew() {
+  try {
+    var acl = Calendar.Acl.list(calId());
+    var items = (acl.items || []).filter(function (r) {
+      return r.scope && r.scope.type === 'user' && r.role !== 'owner';
+    }).map(function (r) {
+      return { email: r.scope.value, role: r.role, ruleId: r.id };
+    });
+    return { crew: items };
+  } catch (err) {
+    return { crew: [], crewError: 'Sharing isn’t available yet: ' + (err && err.message ? err.message : err) };
+  }
+}
+
+/** Share the calendar with someone so it shows up on their own Google Calendar. */
+function addCrew(payload, pin) {
+  requirePin(pin);
+  var email = (payload.email || '').trim().toLowerCase();
+  if (email.indexOf('@') < 1 || email.indexOf('.') < 0) throw new Error('Enter a valid email address.');
+  Calendar.Acl.insert(
+    { role: 'reader', scope: { type: 'user', value: email } },
+    calId(),
+    { sendNotifications: true }
+  );
+  var res = getCrew();
+  res.message = 'Shared with ' + email + ' — they’ll get an email to add the calendar.';
+  return res;
+}
+
+/** Stop sharing the calendar with someone. */
+function removeCrew(payload, pin) {
+  requirePin(pin);
+  if (payload.ruleId) Calendar.Acl.remove(calId(), payload.ruleId);
+  var res = getCrew();
+  res.message = 'Removed ' + (payload.email || 'person') + '.';
+  return res;
+}
+
+
 // ===================== PARSING HELPERS =====================
 
 /** Parse 'Key: value' lines from an event description into a map. */

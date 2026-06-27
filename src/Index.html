@@ -175,6 +175,7 @@
         <div class="sub" id="sub">Loading…</div>
       </div>
       <div style="display:flex;gap:8px">
+        <button class="iconbtn" id="crewBtn" title="Crew / calendar sharing">👥</button>
         <button class="iconbtn" id="homeBtn" title="Add to phone">📱</button>
         <button class="iconbtn" id="refreshBtn" title="Refresh">⟳</button>
       </div>
@@ -266,6 +267,20 @@
     <button class="closebtn" id="pickCancel">Cancel</button>
   </div>
 
+  <!-- crew / calendar sharing -->
+  <div class="scrim" id="crewScrim"></div>
+  <div class="sheet" id="crewSheet">
+    <div class="grab"></div>
+    <h3>👥 Crew — put jobs on their own calendar</h3>
+    <div class="step">Add a coworker's Google email. Google sends them a one-tap link to add the Apache calendar — then every job shows up in <b>their own Google Calendar</b>, on every device, automatically. No Apache sign-in needed.</div>
+    <div class="pinrow">
+      <input class="in" id="crewEmail" type="email" inputmode="email" placeholder="coworker@gmail.com">
+      <button class="b-save" id="crewAdd" style="flex:0 0 92px">Share</button>
+    </div>
+    <div id="crewList" style="margin-top:14px"></div>
+    <button class="closebtn" id="crewClose">Done</button>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -276,7 +291,7 @@
               'August','September','October','November','December'];
     var PRANK = { Urgent:0, High:1, Normal:2, Low:3 };
 
-    var state = { jobs:[], occ:[], review:[], view:'month', month:null, selDay:null, editing:null, selColor:'' };
+    var state = { jobs:[], occ:[], review:[], crew:[], view:'month', month:null, selDay:null, editing:null, selColor:'' };
 
     // ---------- helpers ----------
     function $(id){ return document.getElementById(id); }
@@ -331,6 +346,7 @@
       if(res){
         if(res.jobs){ state.jobs=res.jobs; state.occ=buildOccurrences(state.jobs); $('sub').textContent=subText(state.jobs.length); }
         if(res.review){ state.review=res.review; updateReviewBadge(); }
+        if(res.crew){ state.crew=res.crew; state.crewError=res.crewError||''; renderCrew(); }
       }
       render();
     }
@@ -538,6 +554,41 @@
     }
     function closePick(){ showSheet('pickScrim','pickSheet',false); }
 
+    // ---------- crew / calendar sharing ----------
+    function openCrew(){
+      showSheet('crewScrim','crewSheet',true);
+      $('crewList').innerHTML='<div class="spin" style="margin:24px auto"></div>';
+      google.script.run.withSuccessHandler(function(res){
+        state.crew=(res&&res.crew)||[]; state.crewError=(res&&res.crewError)||''; renderCrew();
+      }).withFailureHandler(function(e){
+        state.crewError='Couldn’t load: '+((e&&e.message)?e.message:e); state.crew=[]; renderCrew();
+      }).getCrew();
+    }
+    function closeCrew(){ showSheet('crewScrim','crewSheet',false); }
+    function renderCrew(){
+      var box=$('crewList'); if(!box) return;
+      var html='';
+      if(state.crewError) html+='<div class="rsnip" style="color:#991b1b;margin-bottom:10px">'+esc(state.crewError)+'</div>';
+      if(!state.crew||!state.crew.length){ html+='<div class="rsnip">No coworkers added yet.</div>'; }
+      else state.crew.forEach(function(c,i){
+        html+='<div class="pickrow" style="cursor:default"><span class="pj">'+esc(c.email)+'</span>'+
+          '<span class="pw">'+esc(c.role==='reader'?'view':(c.role==='writer'?'edit':c.role))+'</span>'+
+          '<button class="iconbtn" style="background:#fee2e2;color:#991b1b;width:30px;height:30px;font-size:14px" '+
+          'onclick="removeCrewByIndex('+i+')">✕</button></div>';
+      });
+      box.innerHTML=html;
+    }
+    function addCrewMember(){
+      var email=$('crewEmail').value.trim();
+      if(!email){ toast('Enter an email.'); return; }
+      $('crewEmail').value='';
+      mutate('addCrew',{email:email});
+    }
+    function removeCrewByIndex(i){
+      var c=state.crew[i]; if(!c) return;
+      if(confirm('Stop sharing with '+c.email+'?')) mutate('removeCrew',{ruleId:c.ruleId,email:c.email});
+    }
+
     function empty(icon,a,b){ $('main').innerHTML='<div class="empty-state"><div class="big">'+icon+'</div>'+esc(a)+'<br><span style="font-size:13px">'+esc(b)+'</span></div>'; }
 
     // ---------- tabs ----------
@@ -668,6 +719,10 @@
     $('pinScrim').onclick=function(){ pendingMutation=null; showPin(false); };
     $('pickCancel').onclick=closePick;
     $('pickScrim').onclick=closePick;
+    $('crewBtn').onclick=openCrew;
+    $('crewClose').onclick=closeCrew;
+    $('crewScrim').onclick=closeCrew;
+    $('crewAdd').onclick=addCrewMember;
 
     // ---------- toast ----------
     var toastTimer=null;

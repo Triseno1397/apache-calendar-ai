@@ -21,8 +21,11 @@ open on a laptop.
   notes). The script creates or **updates** the matching calendar events.
 - Same job name → consistent color (drop-off + pick-up share it). Same-day
   duplicates of a job collapse onto one event.
-- Can't determine a date? The thread is labeled **`Orders/Review`** until the
-  info arrives, then re-processed automatically.
+- As long as a thread has a **job name and at least one date** (drop-off or
+  pick-up), the events go straight onto the calendar — missing times, venue, or
+  other details just show as `TBD`. Only when the **name or the date can't be
+  determined** is the thread labeled **`Orders/Review`** until the info arrives,
+  then re-processed automatically.
 
 ## File layout
 

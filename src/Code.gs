@@ -12,7 +12,8 @@
  *   - Unchanged threads cost nothing (no AI call) — only new/changed reparse.
  *   - Cross-thread duplicates of the same job collapse onto one event.
  *   - Each job gets a consistent color; drop-off + pick-up share it.
- *   - Can't place a date? -> flagged Orders/Review until the info arrives.
+ *   - Has a job name + at least one date? -> placed on the calendar (missing
+ *     times/venue just show as TBD). No name or no date -> Orders/Review.
  *
  * See README.md for the one-time human setup (email, calendar, API key, deploy).
  */
@@ -67,14 +68,22 @@ function processOrderEmails() {
     var msgCount = thread.getMessageCount();
     var state = getState(id);
 
-    // Seen before with no new messages -> nothing changed, skip (no AI cost).
-    if (state && state.msgCount === msgCount) return;
+    // Seen before with no new messages:
+    //  - already synced to the calendar -> skip (nothing changed, no AI cost).
+    //  - still sitting in Needs Review -> re-check it anyway, since it may now
+    //    qualify (a name + a date is enough). Skip only if a human dismissed it.
+    var pendingReview = state && state.review && !state.dismissed;
+    if (state && state.msgCount === msgCount && !pendingReview) return;
 
     try {
       var order = callClaude(getThreadText(thread));
-      var placeable = order.is_order &&
-                      order.confidence !== 'low' &&
-                      (order.drop_off_date || order.pickup_date);
+      // Place it on the calendar as soon as we have a job NAME and a DATE.
+      // Missing times, venue, or other details are fine — they show as TBD.
+      // Only a missing name or a missing date sends a thread to Needs Review.
+      var jobName = order.job_name ? String(order.job_name).trim() : '';
+      var hasName = !!jobName && !/^(tbd|n\/?a|none|unknown)$/i.test(jobName);
+      var hasDate = !!(order.drop_off_date || order.pickup_date);
+      var placeable = order.is_order && hasName && hasDate;
 
       if (!placeable) {
         thread.addLabel(review);
@@ -150,12 +159,22 @@ function callClaude(threadText) {
     '"pickup_date":"YYYY-MM-DD"|null,"pickup_time":"HH:MM"|null,"show_dates":string|null,' +
     '"notes":string|null}\n\n' +
     'Rules:\n' +
-    '- is_order is true ONLY if this is a genuine equipment rental order/show with at least ' +
-    'one identifiable drop-off or pickup date.\n' +
-    '- Use 24-hour times. If a value is not stated, return null (do NOT write "TBD" — the ' +
-    'system fills that in).\n' +
-    '- confidence is "low" if dates are ambiguous or you are guessing. Be conservative — a ' +
-    'wrong date is worse than flagging for review.\n' +
+    '- is_order is true if this thread is a genuine equipment rental order or show booking for ' +
+    'Apache Rental Group. A partial order still counts — it is an order even if the time, venue, ' +
+    'or other details are missing.\n' +
+    '- job_name: the show / event / production / client job name. Return null ONLY if there is no ' +
+    'identifiable job or show name at all.\n' +
+    '- Dates use YYYY-MM-DD; resolve relative dates ("next Friday") against today. Only return a ' +
+    'date you can actually determine from the thread. If a date is not stated or would be a pure ' +
+    'guess, return null — do NOT invent one. (A missing date is what sends a thread to manual ' +
+    'review, which is correct.)\n' +
+    '- A job needs only a name and ONE date (drop-off OR pickup) to go on the calendar. Times, ' +
+    'venue, show_dates, and notes are OPTIONAL — if not stated, return null (do NOT write "TBD"; ' +
+    'the system fills that in). Missing times or venue must NOT stop you from returning the ' +
+    'date(s) you do know.\n' +
+    '- Use 24-hour times.\n' +
+    '- confidence (high|medium|low) reflects how sure you are about the dates; it is ' +
+    'informational only and does not need to be high for the order to be placed.\n' +
     '- notes: capture delivery/dock/loading instructions, on-site contact, and special requests.';
 
   var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
