@@ -676,6 +676,15 @@
 
     document.addEventListener('visibilitychange',function(){ if(!document.hidden) load(); });
     load();
+
+    // First time on this device (e.g. right after scanning the QR): auto-show
+    // the "Add to Home Screen" guide so the app becomes a real icon.
+    try{
+      if(!localStorage.getItem('argSeenWelcome')){
+        localStorage.setItem('argSeenWelcome','1');
+        setTimeout(function(){ showSheet('homeScrim','homeSheet',true); }, 800);
+      }
+    }catch(e){}
   </script>
 </body>
 </html>
