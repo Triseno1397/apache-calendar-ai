@@ -27,7 +27,7 @@ const CONFIG = {
   RUN_HOURS:    [7, 22],           // trigger hours (24h, project timezone): 7 AM & 10 PM
   MAX_THREADS_PER_RUN: 100,        // covers recent/active threads
   MAX_THREAD_CHARS: 18000,         // trim very long threads to control cost
-  EDIT_PIN:     'apache'           // code required in the web app to add/edit/delete jobs ('' = no code)
+  EDIT_PIN:     '4545'             // code required in the web app to add/edit/delete jobs ('' = no code)
 };
 // ==============================================================
 
