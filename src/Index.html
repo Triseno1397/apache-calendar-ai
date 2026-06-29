@@ -81,8 +81,20 @@
     .meta .k{color:var(--muted);min-width:18px;text-align:center}
     .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
     .tag{font-size:12px;font-weight:700;background:var(--soft);color:#334155;padding:4px 9px;border-radius:8px}
-    .notes{background:var(--soft);border-radius:9px;padding:8px 10px;margin-top:9px;
-      font-size:13.5px;color:#334155;line-height:1.4;white-space:pre-wrap}
+    .notes{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:10px;
+      font-size:13.5px;color:#334155;line-height:1.5}
+    .notes.exp{cursor:pointer}
+    .ntitle{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--muted);
+      text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .ntoggle{font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap}
+    .nline{margin:4px 0;display:flex;gap:6px}
+    .nkey{font-weight:800;color:var(--ink);flex:0 0 auto}
+    .nval{min-width:0;word-break:break-word}
+    .nmore{display:none}
+    .notes.open .nmore{display:block}
+    .ntoggle .lless{display:none}
+    .notes.open .ntoggle .lmore{display:none}
+    .notes.open .ntoggle .lless{display:inline}
 
     /* review */
     .rcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0}
@@ -399,9 +411,24 @@
       h+='<div class="meta"><span class="k">'+(drop?'📥':'📦')+'</span><span style="color:var(--muted)">'+other+'</span></div>';
       if(j.showDates) h+='<div class="meta"><span class="k">🎬</span><span>'+esc(j.showDates)+'</span></div>';
       if(j.tags&&j.tags.length){ h+='<div class="tags">'; j.tags.forEach(function(t){ h+='<span class="tag">'+esc(t)+'</span>'; }); h+='</div>'; }
-      if(j.notes) h+='<div class="notes">📝 '+esc(j.notes)+'</div>';
+      if(j.notes) h+=renderNotes(j.notes);
       h+='</div>';
       return h;
+    }
+
+    // Notes -> clean labeled lines. Long notes collapse to a 2-line preview you tap to expand.
+    function renderNotes(notes){
+      var lines=String(notes).split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean);
+      function lineHtml(ln){
+        var m=ln.match(/^([A-Za-z][A-Za-z0-9 \/&.+-]{0,22}):\s*(.+)$/);
+        return m ? '<div class="nline"><span class="nkey">'+esc(m[1])+'</span><span class="nval">'+esc(m[2])+'</span></div>'
+                 : '<div class="nline"><span class="nval">'+esc(ln)+'</span></div>';
+      }
+      var SHOW=2, head=lines.slice(0,SHOW).map(lineHtml).join(''), rest=lines.slice(SHOW), more=rest.length>0;
+      var moreHtml=more?'<div class="nmore">'+rest.map(lineHtml).join('')+'</div>':'';
+      var toggle=more?'<span class="ntoggle"><span class="lmore">+'+rest.length+' more ▾</span><span class="lless">show less ▴</span></span>':'';
+      return '<div class="notes'+(more?' exp':'')+'"'+(more?' onclick="this.classList.toggle(\'open\')"':'')+'>'+
+        '<div class="ntitle"><span>📝 Notes</span>'+toggle+'</div>'+head+moreHtml+'</div>';
     }
 
     // stable key to find a job again from a click handler

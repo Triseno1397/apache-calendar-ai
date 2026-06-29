@@ -179,9 +179,11 @@ function callClaude(threadText) {
     'from each other and from the venue.\n' +
     '- confidence (high|medium|low) reflects how sure you are about the dates; it is ' +
     'informational only and does not need to be high for the order to be placed.\n' +
-    '- notes: capture any other useful specifics the email states — delivery/dock/loading ' +
-    'instructions, on-site contact name + phone, equipment or quantities, PO / account number, ' +
-    'and special requests. If nothing extra is stated, return null.';
+    '- notes: capture any other useful specifics the email states, formatted as SHORT labeled ' +
+    'lines separated by newlines, ONE item per line as "Label: detail". Use concise labels like ' +
+    'Contact, Dock, Loading, Equipment, PO, Account, Parking, or Special. Example: ' +
+    '"Contact: Mike 305-555-0101\\nDock: B, rear\\nEquipment: 4 cameras + fiber\\nPO: 12345". ' +
+    'Only include lines the email actually states. If nothing extra is stated, return null.';
 
   var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
     method: 'post',
@@ -282,11 +284,15 @@ function buildDescription(order, thread) {
     'Pick-up: '    + fmtDateTime(order.pickup_date, order.pickup_time),
     'Pick-up location: '  + (order.pickup_location || 'TBD'),
     'Show dates: ' + (order.show_dates || 'TBD'),
-    'Notes: '      + (order.notes || 'TBD'),
+    'Notes: '      + (order.notes ? encodeNotes(order.notes) : 'TBD'),
     '',
     'Source email: ' + link
   ].join('\n');
 }
+
+/** Notes can be multi-line; keep them on ONE description line by escaping newlines. */
+function encodeNotes(s) { return String(s == null ? '' : s).replace(/\r?\n/g, '\\n'); }
+function decodeNotes(s) { return String(s == null ? '' : s).replace(/\\n/g, '\n'); }
 
 function fmtDateTime(dateStr, timeStr) {
   if (!dateStr) return 'TBD';
