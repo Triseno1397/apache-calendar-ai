@@ -274,13 +274,21 @@
   <div class="scrim" id="crewScrim"></div>
   <div class="sheet" id="crewSheet">
     <div class="grab"></div>
-    <h3>👥 Crew — put jobs on their own calendar</h3>
-    <div class="step">Add a coworker's Google email. Google sends them a one-tap link to add the Apache calendar — then every job shows up in <b>their own Google Calendar</b>, on every device, automatically. No Apache sign-in needed.</div>
+    <h3>👥 Crew — put jobs on everyone's calendar</h3>
+    <div class="step"><b>Has a Google account?</b> Add their email — Google sends a one-tap link and jobs sync to their Google Calendar (and the iPhone/Android Calendar app), updating automatically. No Apache sign-in needed.</div>
     <div class="pinrow">
       <input class="in" id="crewEmail" type="email" inputmode="email" placeholder="coworker@gmail.com">
       <button class="b-save" id="crewAdd" style="flex:0 0 92px">Share</button>
     </div>
     <div id="crewList" style="margin-top:14px"></div>
+
+    <div class="step" style="margin-top:20px"><b>Apple, Outlook, Yahoo — any provider?</b> Subscribe to the live feed instead. Jobs appear in their calendar app and refresh on their own (view-only, no Google account needed). Open this on their phone and tap <b>Add</b>, or copy the link and text it to them.</div>
+    <div class="pinrow">
+      <button class="b-save" id="feedAdd" style="flex:1">📅 Add to my calendar</button>
+      <button class="b-cancel" id="feedCopy" style="flex:0 0 92px">Copy link</button>
+    </div>
+    <div id="feedHint" class="rsnip" style="margin-top:8px"></div>
+
     <button class="closebtn" id="crewClose">Done</button>
   </div>
 
@@ -308,7 +316,7 @@
         .then(function(r){ return r.json(); })
         .then(function(res){ if(res && res.__error) throw new Error(res.__error); return res; });
     }
-    var APP_ACTIONS=['getJobs','getReview','getCrew','scanNow','createJob','updateJob','deleteJob','dismissReview','removeReviewEmail','addReviewToJob','addCrew','removeCrew'];
+    var APP_ACTIONS=['getJobs','getReview','getCrew','getFeedInfo','scanNow','createJob','updateJob','deleteJob','dismissReview','removeReviewEmail','addReviewToJob','addCrew','removeCrew'];
     function makeRunner(){
       var onOk=null,onErr=null;
       var r={withSuccessHandler:function(f){onOk=f;return r;},withFailureHandler:function(f){onErr=f;return r;}};
@@ -325,7 +333,7 @@
               'August','September','October','November','December'];
     var PRANK = { Urgent:0, High:1, Normal:2, Low:3 };
 
-    var state = { jobs:[], occ:[], review:[], crew:[], view:'month', month:null, selDay:null, editing:null, selColor:'' };
+    var state = { jobs:[], occ:[], review:[], crew:[], feed:{}, view:'month', month:null, selDay:null, editing:null, selColor:'' };
 
     // ---------- helpers ----------
     function $(id){ return document.getElementById(id); }
@@ -627,8 +635,34 @@
       }).withFailureHandler(function(e){
         state.crewError='Couldn’t load: '+((e&&e.message)?e.message:e); state.crew=[]; renderCrew();
       }).getCrew();
+      loadFeed();
     }
     function closeCrew(){ showSheet('crewScrim','crewSheet',false); }
+
+    // ---------- subscription feed (Apple / Outlook / Yahoo / any provider) ----------
+    function loadFeed(){
+      var add=$('feedAdd'), copy=$('feedCopy'), hint=$('feedHint');
+      if(add) add.disabled=true; if(copy) copy.disabled=true;
+      google.script.run.withSuccessHandler(function(f){
+        state.feed=f||{};
+        if(add) add.disabled=!state.feed.webcalUrl;
+        if(copy) copy.disabled=!state.feed.icsUrl;
+        if(hint) hint.textContent='Tip: on iPhone the Add button opens Apple Calendar. On Outlook/Yahoo, paste the copied link under “Add calendar → Subscribe from web.”';
+      }).withFailureHandler(function(e){
+        if(hint) hint.textContent='Subscribe link unavailable — redeploy the script, then reopen this.';
+      }).getFeedInfo();
+    }
+    function feedSubscribe(){
+      if(!state.feed||!state.feed.webcalUrl){ toast('Link not ready yet.'); return; }
+      window.location.href=state.feed.webcalUrl;   // hands off to the device's calendar app
+    }
+    function feedCopyLink(){
+      var url=state.feed&&state.feed.icsUrl; if(!url){ toast('Link not ready yet.'); return; }
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){ toast('Subscribe link copied.'); },
+          function(){ window.prompt('Copy this subscribe link:', url); });
+      } else { window.prompt('Copy this subscribe link:', url); }
+    }
     function renderCrew(){
       var box=$('crewList'); if(!box) return;
       var html='';
@@ -774,6 +808,8 @@
     $('crewClose').onclick=closeCrew;
     $('crewScrim').onclick=closeCrew;
     $('crewAdd').onclick=addCrewMember;
+    $('feedAdd').onclick=feedSubscribe;
+    $('feedCopy').onclick=feedCopyLink;
     $('dayClose').onclick=closeDay;
     $('dayScrim').onclick=closeDay;
 

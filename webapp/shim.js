@@ -10,7 +10,7 @@
         .then(function(r){ return r.json(); })
         .then(function(res){ if(res && res.__error) throw new Error(res.__error); return res; });
     }
-    var APP_ACTIONS=['getJobs','getReview','getCrew','scanNow','createJob','updateJob','deleteJob','dismissReview','removeReviewEmail','addReviewToJob','addCrew','removeCrew'];
+    var APP_ACTIONS=['getJobs','getReview','getCrew','getFeedInfo','scanNow','createJob','updateJob','deleteJob','dismissReview','removeReviewEmail','addReviewToJob','addCrew','removeCrew'];
     function makeRunner(){
       var onOk=null,onErr=null;
       var r={withSuccessHandler:function(f){onOk=f;return r;},withFailureHandler:function(f){onErr=f;return r;}};

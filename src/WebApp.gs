@@ -38,7 +38,9 @@ var WEB_PALETTE = [
  * old script.google.com URL keeps working too).
  */
 function doGet(e) {
-  if (e && e.parameter && e.parameter.action) return handleApi(e);
+  var p = (e && e.parameter) || {};
+  if (p.action === 'ics') return serveIcs(p);          // subscription feed (any calendar app)
+  if (p.action) return handleApi(e);
   return HtmlService.createHtmlOutputFromFile('src/Index')
     .setTitle('Apache Rental — Jobs')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
@@ -59,6 +61,7 @@ function handleApi(e) {
       case 'getJobs':           out = getJobs(); break;
       case 'getReview':         out = getReview(); break;
       case 'getCrew':           out = getCrew(); break;
+      case 'getFeedInfo':       out = getFeedInfo(); break;
       case 'scanNow':           out = scanNow(); break;
       case 'createJob':         out = createJob(data, pin); break;
       case 'updateJob':         out = updateJob(data, pin); break;
@@ -395,6 +398,119 @@ function removeCrew(payload, pin) {
   var res = getCrew();
   res.message = 'Removed ' + (payload.email || 'person') + '.';
   return res;
+}
+
+
+// ============== ICS SUBSCRIPTION FEED (works on ANY provider) ==============
+// Apple Calendar (iCloud), Outlook/Hotmail, Yahoo, Proton, Google — anything
+// that can "subscribe to a calendar URL" — can follow this feed and get the
+// jobs, refreshing on its own. No Google account needed. It's view-only: a
+// foreign provider can't be made to accept our edits, only mirror them.
+
+/**
+ * One unguessable token so the feed URL isn't trivially discoverable. Created
+ * once and reused; never rotated automatically (rotating would break anyone
+ * already subscribed). To rotate by hand, delete FEED_TOKEN in Script Properties.
+ */
+function feedToken() {
+  var sp = PropertiesService.getScriptProperties();
+  var t = sp.getProperty('FEED_TOKEN');
+  if (!t) { t = Utilities.getUuid().replace(/-/g, '').slice(0, 20); sp.setProperty('FEED_TOKEN', t); }
+  return t;
+}
+
+/** The subscribe links the UI hands out (https for copy/paste, webcal:// for one-tap). */
+function getFeedInfo() {
+  var base = ScriptApp.getService().getUrl();         // .../exec
+  var url = base + '?action=ics&token=' + feedToken();
+  return { icsUrl: url, webcalUrl: url.replace(/^https?:\/\//, 'webcal://') };
+}
+
+/** Serve the live .ics feed (text/calendar). Requires the matching token. */
+function serveIcs(p) {
+  if ((p.token || '') !== feedToken()) {
+    return ContentService.createTextOutput('Invalid or missing feed token.')
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
+  return ContentService.createTextOutput(buildIcsFeed())
+    .setMimeType(ContentService.MimeType.ICAL);
+}
+
+/** Build an iCalendar document mirroring the job events (same window as getJobs). */
+function buildIcsFeed() {
+  var cal = getCalendar();
+  var tz = getTz();
+  var now = new Date();
+  var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60);
+  var end   = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+  var stampNow = icsUtc(now);
+
+  var out = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Apache Rental Group//Jobs//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Apache Jobs',
+    'X-WR-CALDESC:Drop-off & pick-up jobs from Apache Rental Group',
+    'X-WR-TIMEZONE:' + tz,
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',   // hint subscribers to refresh hourly
+    'X-PUBLISHED-TTL:PT1H'
+  ];
+
+  cal.getEvents(start, end).forEach(function (ev) {
+    var title = ev.getTitle() || '';
+    if (title.indexOf('📦') !== 0 && title.indexOf('📥') !== 0) return;  // jobs only
+
+    out.push('BEGIN:VEVENT');
+    out.push('UID:' + icsEscape(ev.getId()));
+    out.push('DTSTAMP:' + stampNow);
+    out.push('LAST-MODIFIED:' + icsUtc(ev.getLastUpdated() || now));
+    if (ev.isAllDayEvent()) {
+      // floating dates — getAllDayEndDate() is already the exclusive end iCal wants
+      out.push('DTSTART;VALUE=DATE:' + icsDate(ev.getAllDayStartDate(), tz));
+      out.push('DTEND;VALUE=DATE:'   + icsDate(ev.getAllDayEndDate(),   tz));
+    } else {
+      // UTC instants (trailing Z) render at the right local time everywhere — no VTIMEZONE needed
+      out.push('DTSTART:' + icsUtc(ev.getStartTime()));
+      out.push('DTEND:'   + icsUtc(ev.getEndTime()));
+    }
+    out.push('SUMMARY:' + icsEscape(title));
+    var desc = ev.getDescription() || '';
+    if (desc) out.push('DESCRIPTION:' + icsEscape(desc));
+    var loc = ev.getLocation() || '';
+    if (loc) out.push('LOCATION:' + icsEscape(loc));
+    out.push('END:VEVENT');
+  });
+
+  out.push('END:VCALENDAR');
+  return foldIcs(out).join('\r\n') + '\r\n';
+}
+
+function icsUtc(d)      { return Utilities.formatDate(d, 'UTC', "yyyyMMdd'T'HHmmss'Z'"); }
+function icsDate(d, tz) { return Utilities.formatDate(d, tz, 'yyyyMMdd'); }
+
+/** Escape text for an iCal value (RFC 5545): backslash, semicolon, comma, newlines. */
+function icsEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+/** Fold lines at 73 chars per RFC 5545, without splitting a surrogate pair (emoji). */
+function foldIcs(lines) {
+  var out = [];
+  lines.forEach(function (line) {
+    while (line.length > 73) {
+      var cut = 73;
+      var c = line.charCodeAt(cut - 1);
+      if (c >= 0xD800 && c <= 0xDBFF) cut--;   // don't cut between an emoji's two halves
+      out.push(line.slice(0, cut));
+      line = ' ' + line.slice(cut);
+    }
+    out.push(line);
+  });
+  return out;
 }
 
 
