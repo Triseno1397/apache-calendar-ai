@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0E3E7A">
+  <title>Apache Rental Group — Job Calendar</title>
+  <link rel="icon" href="https://i0.wp.com/apacherentalgroup.com/wp-content/uploads/2018/05/cropped-Asset-1-Small-Square.jpg?fit=64%2C64&amp;ssl=1">
+  <link rel="apple-touch-icon" href="https://i0.wp.com/apacherentalgroup.com/wp-content/uploads/2018/05/cropped-Asset-1-Small-Square.jpg?fit=180%2C180&amp;ssl=1">
+  <style>
+    :root{
+      /* Apache Rental Group brand palette (from apacherentalgroup.com) */
+      --navy:#0E3E7A; --navy-deep:#042B60; --navy-2:#11438D;
+      --cyan:#02AED6; --cyan-deep:#0B8EAD; --orange:#FF6900;
+      --bg:#0E3E7A; --panel:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --line:#e2e8f0; --soft:#f1f5f9; --drop:#0E3E7A; --pick:#15803d;
+      --urgent:#dc2626; --high:#ea580c;
+      --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;background:var(--soft);color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    header{position:sticky;top:0;z-index:20;background:#fff;color:var(--ink);
+      padding:calc(14px + var(--safe-top)) 14px 12px;border-bottom:1px solid var(--line);
+      box-shadow:0 2px 10px rgba(14,62,122,.08)}
+    header::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;
+      background:linear-gradient(90deg,var(--navy) 0%,var(--navy-2) 50%,var(--cyan) 100%)}
+    .brand{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .brandid{display:flex;flex-direction:column;min-width:0}
+    .logo{height:30px;width:auto;display:block}
+    .brand .sub{font-size:12px;color:var(--muted);margin-top:5px;font-weight:600}
+    .iconbtn{background:#eef3fb;border:none;color:var(--navy);border-radius:10px;
+      width:38px;height:38px;font-size:17px;cursor:pointer;display:grid;place-items:center}
+    .iconbtn:active{background:#dbe6f6}
+    .toggle{display:flex;background:#eef3fb;border-radius:10px;padding:3px;margin-top:13px}
+    .toggle button{flex:1;border:none;background:transparent;color:var(--navy);font-size:14px;
+      font-weight:700;padding:8px;border-radius:8px;cursor:pointer;position:relative}
+    .toggle button.on{background:var(--navy);color:#fff;box-shadow:0 1px 4px rgba(14,62,122,.35)}
+    .badge{display:inline-block;min-width:18px;padding:0 5px;height:18px;line-height:18px;border-radius:9px;
+      background:var(--urgent);color:#fff;font-size:11px;font-weight:800;margin-left:4px;vertical-align:middle}
+    .actions{display:flex;gap:8px;margin-top:10px}
+    .act{flex:1;border:none;border-radius:11px;padding:12px;font-size:14.5px;font-weight:700;color:#fff;
+      cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+    .act.scan{background:var(--navy)} .act.scan:active{background:var(--navy-deep)}
+    .act.add{background:var(--cyan-deep)} .act.add:active{background:#097690}
+    .act:disabled{background:#64748b;cursor:default}
+    .miniSpin{width:16px;height:16px;border:2px solid rgba(255,255,255,.5);border-top-color:#fff;
+      border-radius:50%;animation:r .8s linear infinite}
+
+    main{padding:14px 14px calc(28px + var(--safe-bot));max-width:820px;margin:0 auto}
+
+    .section-title{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.7px;margin:18px 4px 8px;display:flex;align-items:center;gap:6px}
+    .daygroup{margin:6px 0 8px}
+    .dayhdr{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.6px;margin:14px 4px 8px;display:flex;align-items:baseline;gap:8px}
+    .dayhdr .rel{color:var(--ink)}
+    .dayhdr.today .rel{color:var(--drop)}
+
+    .card{background:var(--panel);border:1px solid var(--line);border-left:5px solid #94a3b8;
+      border-radius:14px;padding:13px 14px;margin:8px 0;box-shadow:0 1px 2px rgba(15,23,42,.04);position:relative}
+    .card.pri-Urgent{border-left-width:7px;box-shadow:0 0 0 1px rgba(220,38,38,.25),0 4px 14px rgba(220,38,38,.16)}
+    .card.pri-Low{opacity:.78}
+    .row1{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .leftwrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .chip{font-size:12px;font-weight:800;letter-spacing:.4px;padding:4px 9px;border-radius:999px;color:#fff;white-space:nowrap}
+    .chip.drop{background:var(--drop)} .chip.pick{background:var(--pick)}
+    .pri{font-size:11px;font-weight:800;letter-spacing:.4px;padding:3px 8px;border-radius:999px;white-space:nowrap}
+    .pri.Urgent{background:var(--urgent);color:#fff}
+    .pri.High{background:var(--high);color:#fff}
+    .pri.Low{background:#e2e8f0;color:#475569}
+    .acts{display:flex;gap:6px}
+    .acts button{border:none;background:var(--soft);width:32px;height:32px;border-radius:8px;font-size:14px;cursor:pointer}
+    .acts button:active{background:#e2e8f0}
+    .time{font-size:15px;font-weight:700}
+    .time.tbd{color:var(--muted);font-weight:600;font-size:13px}
+    .job{font-size:17px;font-weight:700;margin:9px 0 2px;line-height:1.25}
+    .meta{font-size:14px;color:var(--ink);margin:3px 0;display:flex;gap:7px}
+    .meta .k{color:var(--muted);min-width:18px;text-align:center}
+    .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+    .tag{font-size:12px;font-weight:700;background:var(--soft);color:#334155;padding:4px 9px;border-radius:8px}
+    .notes{background:var(--soft);border-radius:9px;padding:8px 10px;margin-top:9px;
+      font-size:13.5px;color:#334155;line-height:1.4;white-space:pre-wrap}
+
+    /* review */
+    .rcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0}
+    .rcard .rsub{font-size:15px;font-weight:700}
+    .rcard .rfrom{font-size:12.5px;color:var(--muted);margin-top:2px}
+    .rcard .rsnip{font-size:13px;color:#475569;margin-top:7px;line-height:1.4}
+    .rbtn{border:none;background:#16a34a;color:#fff;border-radius:9px;
+      padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer}
+    .rbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+    .pickrow{width:100%;display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:#fff;
+      border-radius:10px;padding:11px 12px;margin:7px 0;cursor:pointer;text-align:left;font-family:inherit}
+    .pickrow:active{background:var(--soft)}
+    .pdot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+    .pj{font-weight:700;font-size:14.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pw{font-size:12px;color:var(--muted);white-space:nowrap}
+
+    .empty-state{text-align:center;color:var(--muted);padding:60px 20px}
+    .empty-state .big{font-size:40px;margin-bottom:10px}
+    .spin{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--drop);
+      border-radius:50%;animation:r .8s linear infinite;margin:60px auto}
+    @keyframes r{to{transform:rotate(360deg)}}
+    .err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:12px;
+      padding:14px;margin:20px 4px;font-size:14px}
+    .err button{margin-top:8px;background:#991b1b;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+
+    /* month grid */
+    .monthbar{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 10px}
+    .monthbar .mtitle{font-size:16px;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+    .gh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding:2px 0}
+    .cell{min-height:12.2vh;background:var(--panel);border:1px solid var(--line);border-radius:9px;
+      padding:5px 3px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden}
+    .cell.empty{background:transparent;border:none;cursor:default}
+    .cell.urgent{border-color:#fca5a5;box-shadow:inset 0 0 0 1px #fca5a5}
+    .cell .dn{font-size:13px;font-weight:700;color:#334155;align-self:flex-start}
+    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;min-width:22px;height:22px;
+      display:grid;place-items:center;padding:0 5px}
+    .cell.sel{outline:2px solid var(--drop)}
+    .ebar{font-size:10.5px;line-height:1.65;color:#fff;border-radius:4px;padding:0 4px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;font-weight:700}
+    .cell .more{font-size:9px;color:var(--muted);font-weight:700;padding-left:3px}
+
+    /* sheets / modals */
+    .scrim{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:40}
+    .scrim.show{display:block}
+    .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:#fff;border-radius:18px 18px 0 0;
+      padding:18px 18px calc(22px + var(--safe-bot));transform:translateY(100%);transition:transform .25s ease;
+      max-width:680px;margin:0 auto;max-height:92vh;overflow-y:auto}
+    .sheet.show{transform:translateY(0)}
+    .sheet .grab{width:40px;height:4px;background:var(--line);border-radius:2px;margin:0 auto 14px}
+    .sheet h3{margin:2px 0 12px;font-size:18px}
+    .step{font-size:14px;color:#334155;margin:7px 0;line-height:1.45}
+    .plat{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 2px}
+    .closebtn{width:100%;margin-top:16px;background:var(--bg);color:#fff;border:none;border-radius:11px;
+      padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+
+    /* form */
+    label.fl{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 5px}
+    .in{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:15px;
+      background:#fff;color:var(--ink);font-family:inherit}
+    textarea.in{min-height:74px;resize:vertical}
+    .two{display:flex;gap:10px}.two>div{flex:1}
+    .seg{display:flex;gap:6px;flex-wrap:wrap}
+    .seg button{flex:1;min-width:64px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 6px;
+      font-size:13px;font-weight:700;color:#475569;cursor:pointer}
+    .seg button.on[data-p="Urgent"]{background:var(--urgent);border-color:var(--urgent);color:#fff}
+    .seg button.on[data-p="High"]{background:var(--high);border-color:var(--high);color:#fff}
+    .seg button.on[data-p="Normal"]{background:var(--bg);border-color:var(--bg);color:#fff}
+    .seg button.on[data-p="Low"]{background:#94a3b8;border-color:#94a3b8;color:#fff}
+    .swatches{display:flex;flex-wrap:wrap;gap:9px}
+    .sw{width:34px;height:34px;border-radius:50%;cursor:pointer;border:3px solid transparent}
+    .sw.on{border-color:#0f172a;transform:scale(1.08)}
+    .formbtns{display:flex;gap:10px;margin-top:20px}
+    .formbtns button{flex:1;border:none;border-radius:11px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+    .b-save{background:#16a34a;color:#fff} .b-cancel{background:var(--soft);color:#334155}
+    .b-del{background:#fee2e2;color:#991b1b;flex:0 0 52px}
+    .pinrow{display:flex;gap:10px;margin-top:8px}
+
+    .toast{position:fixed;left:50%;bottom:calc(22px + var(--safe-bot));transform:translateX(-50%) translateY(20px);
+      background:var(--navy-deep);color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;font-weight:600;max-width:90%;
+      text-align:center;opacity:0;pointer-events:none;transition:all .25s ease;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brandid">
+        <img class="logo" src="https://i0.wp.com/apacherentalgroup.com/wp-content/uploads/2018/05/Apache-Logo-1200x2-1.png?fit=629%2C163&amp;ssl=1" alt="Apache Rental Group">
+        <div class="sub" id="sub">Loading…</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="iconbtn" id="crewBtn" title="Crew / calendar sharing">👥</button>
+        <button class="iconbtn" id="homeBtn" title="Add to phone">📱</button>
+        <button class="iconbtn" id="refreshBtn" title="Refresh">⟳</button>
+      </div>
+    </div>
+    <div class="toggle">
+      <button id="tMonth" class="on">Calendar</button>
+      <button id="tReview">Review<span class="badge" id="revBadge" style="display:none">0</span></button>
+    </div>
+    <div class="actions">
+      <button id="scanBtn" class="act scan">🔍 Scan emails</button>
+      <button id="addBtn" class="act add">➕ Add job</button>
+    </div>
+  </header>
+
+  <main id="main"><div class="spin"></div></main>
+
+  <!-- add to home sheet -->
+  <div class="scrim" id="homeScrim"></div>
+  <div class="sheet" id="homeSheet">
+    <div class="grab"></div>
+    <h3>📱 Add this to your home screen</h3>
+    <div class="plat">iPhone (Safari)</div>
+    <div class="step">1. Tap <b>Share</b> (□ with ↑) at the bottom.</div>
+    <div class="step">2. Tap <b>Add to Home Screen</b> → <b>Add</b>.</div>
+    <div class="plat">Android (Chrome)</div>
+    <div class="step">1. Tap the <b>⋮</b> menu (top-right).</div>
+    <div class="step">2. Tap <b>Add to Home screen</b> → <b>Add</b>.</div>
+    <button class="closebtn" id="homeClose">Got it</button>
+  </div>
+
+  <!-- job form -->
+  <div class="scrim" id="formScrim"></div>
+  <div class="sheet" id="formSheet">
+    <div class="grab"></div>
+    <h3 id="formTitle">Add job</h3>
+    <label class="fl">Job / show name</label>
+    <input class="in" id="f_job" placeholder="e.g. Lakers vs Celtics">
+    <label class="fl">Venue</label>
+    <input class="in" id="f_venue" placeholder="e.g. Crypto.com Arena">
+    <label class="fl">Priority</label>
+    <div class="seg" id="f_priority">
+      <button data-p="Urgent">Urgent</button>
+      <button data-p="High">High</button>
+      <button data-p="Normal" class="on">Normal</button>
+      <button data-p="Low">Low</button>
+    </div>
+    <label class="fl">Color</label>
+    <div class="swatches" id="f_color"></div>
+    <div class="two">
+      <div><label class="fl">📦 Drop-off date</label><input class="in" type="date" id="f_dropDate"></div>
+      <div><label class="fl">Time</label><input class="in" type="time" id="f_dropTime"></div>
+    </div>
+    <div class="two">
+      <div><label class="fl">📥 Pick-up date</label><input class="in" type="date" id="f_pickDate"></div>
+      <div><label class="fl">Time</label><input class="in" type="time" id="f_pickTime"></div>
+    </div>
+    <label class="fl">Show dates (optional)</label>
+    <input class="in" id="f_showDates" placeholder="e.g. Mar 14–16">
+    <label class="fl">Tags (comma separated)</label>
+    <input class="in" id="f_tags" placeholder="e.g. rush, VIP, fiber">
+    <label class="fl">Notes</label>
+    <textarea class="in" id="f_notes" placeholder="Dock, contact, special requests…"></textarea>
+    <div class="formbtns">
+      <button class="b-cancel" id="f_cancel">Cancel</button>
+      <button class="b-del" id="f_delete" style="display:none">🗑️</button>
+      <button class="b-save" id="f_save">Save</button>
+    </div>
+  </div>
+
+  <!-- pin -->
+  <div class="scrim" id="pinScrim"></div>
+  <div class="sheet" id="pinSheet">
+    <div class="grab"></div>
+    <h3>🔒 Edit code</h3>
+    <div class="step">Enter the team edit code to add, change, or remove jobs.</div>
+    <input class="in" id="pinInput" type="password" inputmode="text" placeholder="Edit code" style="margin-top:6px">
+    <div class="formbtns">
+      <button class="b-cancel" id="pinCancel">Cancel</button>
+      <button class="b-save" id="pinOk">Unlock</button>
+    </div>
+  </div>
+
+  <!-- pick existing job -->
+  <div class="scrim" id="pickScrim"></div>
+  <div class="sheet" id="pickSheet">
+    <div class="grab"></div>
+    <h3>Add email to which job?</h3>
+    <div id="pickList"></div>
+    <button class="closebtn" id="pickCancel">Cancel</button>
+  </div>
+
+  <!-- crew / calendar sharing -->
+  <div class="scrim" id="crewScrim"></div>
+  <div class="sheet" id="crewSheet">
+    <div class="grab"></div>
+    <h3>👥 Crew — put jobs on their own calendar</h3>
+    <div class="step">Add a coworker's Google email. Google sends them a one-tap link to add the Apache calendar — then every job shows up in <b>their own Google Calendar</b>, on every device, automatically. No Apache sign-in needed.</div>
+    <div class="pinrow">
+      <input class="in" id="crewEmail" type="email" inputmode="email" placeholder="coworker@gmail.com">
+      <button class="b-save" id="crewAdd" style="flex:0 0 92px">Share</button>
+    </div>
+    <div id="crewList" style="margin-top:14px"></div>
+    <button class="closebtn" id="crewClose">Done</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ===== Hosted-mode shim: call the Apps Script API with fetch() instead of
+       google.script.run. credentials:'omit' = no Google cookies = anonymous =
+       works in any browser no matter how many Google accounts are signed in. ===== */
+    var APPS_SCRIPT_API = 'https://script.google.com/macros/s/AKfycbxcyQfAR82lZ4ZnLIgLMlqhZpl4BFJP1UY0TcIwFKggFnJ4wg1MmzAduKAaKKWueqrV3Q/exec';
+    function callApi(action, args){
+      var url = APPS_SCRIPT_API + '?action=' + encodeURIComponent(action);
+      if(args.length && args[0] != null) url += '&data=' + encodeURIComponent(JSON.stringify(args[0]));
+      if(args.length > 1 && args[1] != null) url += '&pin=' + encodeURIComponent(args[1]);
+      return fetch(url, { method:'GET', credentials:'omit' })
+        .then(function(r){ return r.json(); })
+        .then(function(res){ if(res && res.__error) throw new Error(res.__error); return res; });
+    }
+    var APP_ACTIONS=['getJobs','getReview','getCrew','scanNow','createJob','updateJob','deleteJob','dismissReview','removeReviewEmail','addReviewToJob','addCrew','removeCrew'];
+    function makeRunner(){
+      var onOk=null,onErr=null;
+      var r={withSuccessHandler:function(f){onOk=f;return r;},withFailureHandler:function(f){onErr=f;return r;}};
+      APP_ACTIONS.forEach(function(n){ r[n]=function(){ callApi(n,[].slice.call(arguments)).then(function(x){if(onOk)onOk(x);}).catch(function(e){if(onErr)onErr(e);}); return r; }; });
+      return r;
+    }
+    var google={script:{}};
+    Object.defineProperty(google.script,'run',{get:makeRunner});
+
+    var PALETTE = ['#2563eb','#16a34a','#dc2626','#ea580c','#9333ea',
+                   '#ca8a04','#0891b2','#db2777','#0d9488','#475569'];
+    var WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var MO = ['January','February','March','April','May','June','July',
+              'August','September','October','November','December'];
+    var PRANK = { Urgent:0, High:1, Normal:2, Low:3 };
+
+    var state = { jobs:[], occ:[], review:[], crew:[], view:'month', month:null, selDay:null, editing:null, selColor:'' };
+
+    // ---------- helpers ----------
+    function $(id){ return document.getElementById(id); }
+    function pad(n){ return (n<10?'0':'')+n; }
+    function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+    function parseYMD(s){ var p=s.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+    function todayStr(){ return ymd(new Date()); }
+    function colorFor(name){
+      var s=(name||'').toLowerCase(), h=0;
+      for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))%100000;
+      return PALETTE[h%PALETTE.length];
+    }
+    function accent(job){ return job.color || colorFor(job.job); }
+    function fmtTime(t){
+      if(!t) return '';
+      var p=t.split(':'), h=+p[0], m=p[1], ap=h<12?'AM':'PM', h12=h%12; if(h12===0)h12=12;
+      return h12+':'+m+' '+ap;
+    }
+    function relLabel(s){
+      var t=todayStr(); if(s===t) return 'Today';
+      var diff=Math.round((parseYMD(s)-parseYMD(t))/86400000);
+      if(diff===1) return 'Tomorrow'; if(diff===-1) return 'Yesterday';
+      return WD[parseYMD(s).getDay()];
+    }
+    function longDate(s){ var d=parseYMD(s); return WD[d.getDay()]+', '+MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }
+    function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function subText(n){ var t=new Date(); return n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(t.getHours())+':'+pad(t.getMinutes())); }
+    function revDate(iso){ try{ var d=new Date(iso); return MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }catch(e){ return ''; } }
+
+    // ---------- data ----------
+    function buildOccurrences(jobs){
+      var occ=[];
+      jobs.forEach(function(j){
+        if(j.dropOffDate) occ.push({type:'dropoff',date:j.dropOffDate,time:j.dropOffTime,job:j});
+        if(j.pickUpDate)  occ.push({type:'pickup', date:j.pickUpDate, time:j.pickUpTime, job:j});
+      });
+      occ.sort(function(a,b){
+        if(a.date!==b.date) return a.date<b.date?-1:1;
+        var pa=PRANK[a.job.priority]||2, pb=PRANK[b.job.priority]||2;
+        if(pa!==pb) return pa-pb;
+        return (a.time||'24:00')<(b.time||'24:00')?-1:1;
+      });
+      return occ;
+    }
+
+    function updateReviewBadge(){
+      var b=$('revBadge');
+      if(state.review.length){ b.textContent=state.review.length; b.style.display='inline-block'; }
+      else b.style.display='none';
+    }
+    function updateAll(res){
+      if(res){
+        if(res.jobs){ state.jobs=res.jobs; state.occ=buildOccurrences(state.jobs); $('sub').textContent=subText(state.jobs.length); }
+        if(res.review){ state.review=res.review; updateReviewBadge(); }
+        if(res.crew){ state.crew=res.crew; state.crewError=res.crewError||''; renderCrew(); }
+      }
+      render();
+    }
+    function load(){
+      $('main').innerHTML='<div class="spin"></div>';
+      google.script.run.withSuccessHandler(updateAll).withFailureHandler(onErr).getJobs();
+      loadReview();
+    }
+    function loadReview(){
+      google.script.run.withSuccessHandler(function(res){
+        state.review=(res&&res.items)||[];
+        updateReviewBadge();
+        if(state.view==='review') render();
+      }).withFailureHandler(function(){}).getReview();
+    }
+    function onData(res){ updateAll(res); }
+    function onErr(e){
+      $('main').innerHTML='<div class="err">Couldn\'t load jobs.<br>'+esc((e&&e.message)?e.message:e)+
+        '<br><button onclick="load()">Try again</button></div>';
+      $('sub').textContent='Error';
+    }
+
+    // ---------- render ----------
+    function render(){
+      if(state.view==='review') renderReview();
+      else renderMonth();
+    }
+
+    function card(o){
+      var j=o.job, c=accent(j), drop=o.type==='dropoff';
+      var h='<div class="card pri-'+(j.priority||'Normal')+'" style="border-left-color:'+c+'">';
+      h+='<div class="row1"><div class="leftwrap">';
+      h+='<span class="chip '+(drop?'drop':'pick')+'">'+(drop?'📦 DROP OFF':'📥 PICK UP')+'</span>';
+      if(j.priority==='Urgent') h+='<span class="pri Urgent">🔴 URGENT</span>';
+      else if(j.priority==='High') h+='<span class="pri High">🟠 HIGH</span>';
+      else if(j.priority==='Low') h+='<span class="pri Low">LOW</span>';
+      h+= o.time ? '<span class="time">'+fmtTime(o.time)+'</span>' : '<span class="time tbd">time TBD</span>';
+      h+='</div><div class="acts">'+
+         '<button title="Edit" onclick="editJob(\''+jkey(j)+'\')">✏️</button>'+
+         '<button title="Remove" onclick="delJob(\''+jkey(j)+'\')">🗑️</button></div></div>';
+      h+='<div class="job">'+esc(j.job||'Untitled job')+'</div>';
+      if(j.venue) h+='<div class="meta"><span class="k">📍</span><span>'+esc(j.venue)+'</span></div>';
+      var other = drop
+        ? (j.pickUpDate ? 'Pick-up '+longDate(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'') : 'Pick-up TBD')
+        : (j.dropOffDate? 'Drop-off '+longDate(j.dropOffDate)+(j.dropOffTime?' · '+fmtTime(j.dropOffTime):'') : 'Drop-off TBD');
+      h+='<div class="meta"><span class="k">'+(drop?'📥':'📦')+'</span><span style="color:var(--muted)">'+other+'</span></div>';
+      if(j.showDates) h+='<div class="meta"><span class="k">🎬</span><span>'+esc(j.showDates)+'</span></div>';
+      if(j.tags&&j.tags.length){ h+='<div class="tags">'; j.tags.forEach(function(t){ h+='<span class="tag">'+esc(t)+'</span>'; }); h+='</div>'; }
+      if(j.notes) h+='<div class="notes">📝 '+esc(j.notes)+'</div>';
+      h+='</div>';
+      return h;
+    }
+
+    // stable key to find a job again from a click handler
+    function jkey(j){ return j.ref || (j.dropOffEventId||'') + '~' + (j.pickUpEventId||''); }
+    function findJob(k){
+      for(var i=0;i<state.jobs.length;i++){ if(jkey(state.jobs[i])===k) return state.jobs[i]; }
+      return null;
+    }
+
+    function renderList(){
+      var occ=state.occ, t=todayStr();
+      if(!occ.length) return empty('🗓️','No jobs scheduled yet.','Tap “Scan emails” or “Add job”.');
+      var upcoming=occ.filter(function(o){return o.date>=t;});
+      var past=occ.filter(function(o){return o.date<t;});
+      var pri=upcoming.filter(function(o){return o.job.priority==='Urgent'||o.job.priority==='High';});
+      var html='';
+
+      if(pri.length){
+        html+='<div class="section-title">⭐ Priorities</div>';
+        pri.forEach(function(o){ html+=card(o); });
+      }
+
+      html+='<div class="section-title">🗓️ Schedule</div>';
+      if(upcoming.length){
+        var day=null;
+        upcoming.forEach(function(o){
+          if(o.date!==day){ if(day!==null) html+='</div>'; day=o.date;
+            html+='<div class="daygroup"><div class="dayhdr'+(o.date===t?' today':'')+'"><span class="rel">'+
+              relLabel(o.date)+'</span><span>'+longDate(o.date)+'</span></div>'; }
+          html+=card(o);
+        });
+        html+='</div>';
+      } else html+='<div class="empty-state"><div class="big">📭</div>No upcoming jobs.</div>';
+
+      if(past.length){
+        html+='<div class="section-title"><button class="rbtn" style="background:#64748b" onclick="togglePast()">↓ '+
+          past.length+' past event'+(past.length===1?'':'s')+'</button></div><div id="pastWrap" style="display:none">';
+        var pday=null;
+        past.forEach(function(o){
+          if(o.date!==pday){ if(pday!==null) html+='</div>'; pday=o.date;
+            html+='<div class="daygroup"><div class="dayhdr"><span class="rel">'+relLabel(o.date)+
+              '</span><span>'+longDate(o.date)+'</span></div>'; }
+          html+=card(o);
+        });
+        html+='</div></div>';
+      }
+      $('main').innerHTML=html;
+    }
+    function togglePast(){ var w=$('pastWrap'); if(w) w.style.display=w.style.display==='none'?'block':'none'; }
+
+    function renderMonth(){
+      if(!state.month){
+        var t=todayStr(), up=state.occ.filter(function(o){return o.date>=t;});
+        var base=up.length?parseYMD(up[0].date):new Date();
+        state.month={y:base.getFullYear(),m:base.getMonth()};
+      }
+      var y=state.month.y, m=state.month.m, t=todayStr(), byDate={};
+      state.occ.forEach(function(o){ (byDate[o.date]=byDate[o.date]||[]).push(o); });
+      var startWd=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate();
+
+      var html='<div class="monthbar"><button class="iconbtn" style="background:#e2e8f0;color:#334155" onclick="moveMonth(-1)">‹</button>'+
+        '<div class="mtitle">'+MO[m]+' '+y+'</div>'+
+        '<button class="iconbtn" style="background:#e2e8f0;color:#334155" onclick="moveMonth(1)">›</button></div><div class="grid">';
+      WD.forEach(function(d){ html+='<div class="gh">'+d[0]+'</div>'; });
+      for(var i=0;i<startWd;i++) html+='<div class="cell empty"></div>';
+      for(var day=1;day<=days;day++){
+        var ds=y+'-'+pad(m+1)+'-'+pad(day), list=byDate[ds]||[], bars='', urgent=false;
+        list.slice(0,4).forEach(function(o){
+          if(o.job.priority==='Urgent') urgent=true;
+          bars+='<div class="ebar" style="background:'+accent(o.job)+'">'+esc(o.job.job)+'</div>';
+        });
+        if(list.length>4) bars+='<div class="more">+'+(list.length-4)+' more</div>';
+        html+='<div class="cell'+(ds===t?' today':'')+(ds===state.selDay?' sel':'')+(urgent?' urgent':'')+
+          '" onclick="selDay(\''+ds+'\')"><span class="dn">'+day+'</span>'+bars+'</div>';
+      }
+      html+='</div>';
+      var sel=state.selDay&&byDate[state.selDay];
+      if(sel&&sel.length){
+        html+='<div class="daygroup" style="margin-top:18px"><div class="dayhdr'+(state.selDay===t?' today':'')+
+          '"><span class="rel">'+relLabel(state.selDay)+'</span><span>'+longDate(state.selDay)+'</span></div>';
+        sel.forEach(function(o){ html+=card(o); }); html+='</div>';
+      } else html+='<div class="section-title" style="justify-content:center">Tap a day to see its jobs</div>';
+      $('main').innerHTML=html;
+    }
+    function moveMonth(d){ var m=state.month.m+d,y=state.month.y; if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+      state.month={y:y,m:m}; state.selDay=null; renderMonth(); }
+    function selDay(ds){ state.selDay=(state.selDay===ds?null:ds); renderMonth(); }
+
+    function renderReview(){
+      if(!state.review.length) return empty('✅','Nothing needs review.','Emails the AI can’t place show up here.');
+      var html='<div class="section-title">📬 Needs review — AI couldn’t place these</div>';
+      state.review.forEach(function(r,i){
+        var open = r.permalink
+          ? '<a class="rbtn" style="background:#334155;text-decoration:none;display:inline-block" href="'+esc(r.permalink)+'" target="_blank">✉️ Open</a>'
+          : '';
+        html+='<div class="rcard"><div class="rsub">'+esc(r.subject)+'</div>'+
+          '<div class="rfrom">'+esc(r.from)+' · '+revDate(r.date)+'</div>'+
+          '<div class="rsnip">'+esc(r.snippet)+'…</div>'+
+          '<div class="rbtns">'+
+            '<button class="rbtn" style="background:#16a34a" onclick="reviewCreate('+i+')">➕ New job</button>'+
+            '<button class="rbtn" style="background:var(--navy)" onclick="reviewAddToJob('+i+')">🔗 Add to job</button>'+
+            open+
+            '<button class="rbtn" style="background:#64748b" onclick="reviewDismiss('+i+')">✕ Dismiss</button>'+
+            '<button class="rbtn" style="background:#dc2626" onclick="reviewRemove('+i+')">🗑️ Remove</button>'+
+          '</div></div>';
+      });
+      $('main').innerHTML=html;
+    }
+    // create a brand-new job from a review email (dismisses it on save)
+    function reviewCreate(i){
+      var r=state.review[i]||{};
+      openForm(null,{ job:(r.subject||'').replace(/^(re|fwd):\s*/i,''), notes:r.snippet||'' });
+      state.reviewThreadId=r.id;
+    }
+    // clear the review flag — email stays in Gmail
+    function reviewDismiss(i){ var r=state.review[i]||{}; mutate('dismissReview',{threadId:r.id}); }
+    // move the email to Trash
+    function reviewRemove(i){
+      var r=state.review[i]||{};
+      if(confirm('Remove this email? It will be moved to Trash (recoverable for 30 days).'))
+        mutate('removeReviewEmail',{threadId:r.id});
+    }
+    // attach this email to an existing job
+    function reviewAddToJob(i){
+      if(!state.jobs.length){ toast('No jobs yet — create one first.'); return; }
+      state.pickReview=state.review[i]||{};
+      openPick();
+    }
+    function doAddToJob(k){
+      var j=findJob(k), r=state.pickReview||{};
+      if(!j) return;
+      closePick();
+      var note='From email: '+(r.subject||'')+(r.snippet?' — '+r.snippet:'');
+      mutate('addReviewToJob',{ threadId:r.id, note:note, job:{
+        job:j.job, venue:j.venue, dropOffDate:j.dropOffDate, dropOffTime:j.dropOffTime,
+        pickUpDate:j.pickUpDate, pickUpTime:j.pickUpTime, showDates:j.showDates, notes:j.notes,
+        priority:j.priority, color:j.color, tags:j.tags, ref:j.ref,
+        dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId } });
+    }
+    function jobSortDate(j){ return j.dropOffDate||j.pickUpDate||''; }
+    function openPick(){
+      var box=$('pickList'); box.innerHTML='';
+      var jobs=state.jobs.slice().sort(function(a,b){ return (jobSortDate(a)||'9999')<(jobSortDate(b)||'9999')?-1:1; });
+      jobs.forEach(function(j){
+        var b=document.createElement('button'); b.className='pickrow';
+        var when=jobSortDate(j);
+        b.innerHTML='<span class="pdot" style="background:'+accent(j)+'"></span>'+
+          '<span class="pj">'+esc(j.job||'Untitled')+'</span>'+
+          '<span class="pw">'+(when?longDate(when):'')+'</span>';
+        b.onclick=function(){ doAddToJob(jkey(j)); };
+        box.appendChild(b);
+      });
+      showSheet('pickScrim','pickSheet',true);
+    }
+    function closePick(){ showSheet('pickScrim','pickSheet',false); }
+
+    // ---------- crew / calendar sharing ----------
+    function openCrew(){
+      showSheet('crewScrim','crewSheet',true);
+      $('crewList').innerHTML='<div class="spin" style="margin:24px auto"></div>';
+      google.script.run.withSuccessHandler(function(res){
+        state.crew=(res&&res.crew)||[]; state.crewError=(res&&res.crewError)||''; renderCrew();
+      }).withFailureHandler(function(e){
+        state.crewError='Couldn’t load: '+((e&&e.message)?e.message:e); state.crew=[]; renderCrew();
+      }).getCrew();
+    }
+    function closeCrew(){ showSheet('crewScrim','crewSheet',false); }
+    function renderCrew(){
+      var box=$('crewList'); if(!box) return;
+      var html='';
+      if(state.crewError) html+='<div class="rsnip" style="color:#991b1b;margin-bottom:10px">'+esc(state.crewError)+'</div>';
+      if(!state.crew||!state.crew.length){ html+='<div class="rsnip">No coworkers added yet.</div>'; }
+      else state.crew.forEach(function(c,i){
+        html+='<div class="pickrow" style="cursor:default"><span class="pj">'+esc(c.email)+'</span>'+
+          '<span class="pw">'+esc(c.role==='reader'?'view':(c.role==='writer'?'edit':c.role))+'</span>'+
+          '<button class="iconbtn" style="background:#fee2e2;color:#991b1b;width:30px;height:30px;font-size:14px" '+
+          'onclick="removeCrewByIndex('+i+')">✕</button></div>';
+      });
+      box.innerHTML=html;
+    }
+    function addCrewMember(){
+      var email=$('crewEmail').value.trim();
+      if(!email){ toast('Enter an email.'); return; }
+      $('crewEmail').value='';
+      mutate('addCrew',{email:email});
+    }
+    function removeCrewByIndex(i){
+      var c=state.crew[i]; if(!c) return;
+      if(confirm('Stop sharing with '+c.email+'?')) mutate('removeCrew',{ruleId:c.ruleId,email:c.email});
+    }
+
+    function empty(icon,a,b){ $('main').innerHTML='<div class="empty-state"><div class="big">'+icon+'</div>'+esc(a)+'<br><span style="font-size:13px">'+esc(b)+'</span></div>'; }
+
+    // ---------- tabs ----------
+    function setView(v){
+      state.view=v;
+      $('tMonth').className=v==='month'?'on':''; $('tReview').className=v==='review'?'on':'';
+      render();
+    }
+    $('tMonth').onclick=function(){setView('month');};
+    $('tReview').onclick=function(){setView('review');};
+    $('refreshBtn').onclick=load;
+
+    // ---------- scan ----------
+    function setScanning(on){ var b=$('scanBtn'); b.disabled=on;
+      b.innerHTML=on?'<span class="miniSpin"></span> Scanning… (10–30s)':'🔍 Scan emails'; }
+    $('scanBtn').onclick=function(){
+      setScanning(true); toast('Reading the inbox with AI…');
+      google.script.run.withSuccessHandler(function(res){
+        setScanning(false); updateAll(res);
+        toast(res&&res.message?res.message:'Scan complete');
+      }).withFailureHandler(function(e){ setScanning(false); toast('Scan failed: '+((e&&e.message)?e.message:e)); }).scanNow();
+    };
+
+    // ---------- add / edit form ----------
+    function paintSwatches(){
+      var box=$('f_color'); box.innerHTML='';
+      PALETTE.forEach(function(hex){
+        var d=document.createElement('div');
+        d.className='sw'+(state.selColor===hex?' on':''); d.style.background=hex;
+        d.onclick=function(){ state.selColor=hex; paintSwatches(); };
+        box.appendChild(d);
+      });
+    }
+    function setPriority(p){
+      var seg=$('f_priority').children;
+      for(var i=0;i<seg.length;i++) seg[i].className=(seg[i].getAttribute('data-p')===p)?'on':'';
+    }
+    (function(){ var seg=$('f_priority').children; for(var i=0;i<seg.length;i++){ (function(btn){
+      btn.onclick=function(){ setPriority(btn.getAttribute('data-p')); }; })(seg[i]); } })();
+
+    function openForm(job, prefill){
+      state.editing=job||null;
+      state.reviewThreadId=null;
+      var j = job || prefill || {};
+      $('formTitle').textContent=job?'Edit job':'Add job';
+      $('f_job').value=j.job||''; $('f_venue').value=j.venue||'';
+      $('f_dropDate').value=j.dropOffDate||''; $('f_dropTime').value=j.dropOffTime||'';
+      $('f_pickDate').value=j.pickUpDate||''; $('f_pickTime').value=j.pickUpTime||'';
+      $('f_showDates').value=j.showDates||''; $('f_notes').value=j.notes||'';
+      $('f_tags').value=(j.tags&&j.tags.length)?j.tags.join(', '):'';
+      setPriority(j.priority||'Normal');
+      state.selColor=j.color||''; paintSwatches();
+      $('f_delete').style.display=job?'block':'none';
+      showForm(true);
+    }
+    function readForm(){
+      var seg=$('f_priority').children, pri='Normal';
+      for(var i=0;i<seg.length;i++) if(seg[i].className==='on') pri=seg[i].getAttribute('data-p');
+      var tags=$('f_tags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+      var d={ job:$('f_job').value.trim(), venue:$('f_venue').value.trim(),
+        dropOffDate:$('f_dropDate').value||null, dropOffTime:$('f_dropTime').value||null,
+        pickUpDate:$('f_pickDate').value||null, pickUpTime:$('f_pickTime').value||null,
+        showDates:$('f_showDates').value.trim(), notes:$('f_notes').value.trim(),
+        priority:pri, color:state.selColor, tags:tags };
+      if(state.editing){ d.ref=state.editing.ref; d.dropOffEventId=state.editing.dropOffEventId; d.pickUpEventId=state.editing.pickUpEventId; }
+      if(state.reviewThreadId) d.reviewThreadId=state.reviewThreadId;
+      return d;
+    }
+    $('f_save').onclick=function(){
+      var d=readForm();
+      if(!d.job){ toast('Add a job name.'); return; }
+      if(!d.dropOffDate && !d.pickUpDate){ toast('Add a drop-off or pick-up date.'); return; }
+      mutate(state.editing?'updateJob':'createJob', d);
+    };
+    $('f_delete').onclick=function(){
+      if(!state.editing) return;
+      if(confirm('Remove “'+(state.editing.job||'this job')+'” from the calendar?'))
+        mutate('deleteJob', { job:state.editing.job, ref:state.editing.ref,
+          dropOffEventId:state.editing.dropOffEventId, pickUpEventId:state.editing.pickUpEventId });
+    };
+    $('f_cancel').onclick=function(){ showForm(false); };
+    $('addBtn').onclick=function(){ openForm(null,null); };
+    window.editJob=function(k){ var j=findJob(k); if(j) openForm(j,null); };
+    window.delJob=function(k){
+      var j=findJob(k); if(!j) return;
+      if(confirm('Remove “'+(j.job||'this job')+'” from the calendar?'))
+        mutate('deleteJob', { job:j.job, ref:j.ref, dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId });
+    };
+
+    // ---------- mutate w/ PIN ----------
+    var pendingMutation=null;
+    function getPin(){ try{ return localStorage.getItem('argPin')||''; }catch(e){ return ''; } }
+    function setStoredPin(p){ try{ localStorage.setItem('argPin',p); }catch(e){} }
+    function mutate(fn, data){
+      var pin=getPin();
+      if(!pin){ pendingMutation={fn:fn,data:data}; showPin(true); return; }
+      runMutation(fn,data,pin);
+    }
+    function runMutation(fn,data,pin){
+      showForm(false);
+      $('f_save').disabled=true;
+      google.script.run.withSuccessHandler(function(res){
+        $('f_save').disabled=false;
+        updateAll(res);
+        toast(res&&res.message?res.message:'Saved');
+      }).withFailureHandler(function(e){
+        $('f_save').disabled=false;
+        var msg=(e&&e.message)?e.message:(''+e);
+        if(/PIN|code/i.test(msg)){ setStoredPin(''); toast('Wrong edit code — try again.'); pendingMutation={fn:fn,data:data}; showPin(true); }
+        else toast('Error: '+msg);
+      })[fn](data, pin);
+    }
+    $('pinOk').onclick=function(){
+      var p=$('pinInput').value.trim(); if(!p){ return; }
+      setStoredPin(p); showPin(false);
+      if(pendingMutation){ var m=pendingMutation; pendingMutation=null; runMutation(m.fn,m.data,p); }
+    };
+    $('pinCancel').onclick=function(){ pendingMutation=null; showPin(false); };
+
+    // ---------- sheet plumbing ----------
+    function showSheet(scrim,sheet,on){ $(scrim).className=on?'scrim show':'scrim'; $(sheet).className=on?'sheet show':'sheet'; }
+    function showForm(on){ showSheet('formScrim','formSheet',on); }
+    function showPin(on){ showSheet('pinScrim','pinSheet',on); if(on){ $('pinInput').value=''; setTimeout(function(){$('pinInput').focus();},250); } }
+    $('homeBtn').onclick=function(){ showSheet('homeScrim','homeSheet',true); };
+    $('homeClose').onclick=function(){ showSheet('homeScrim','homeSheet',false); };
+    $('homeScrim').onclick=function(){ showSheet('homeScrim','homeSheet',false); };
+    $('formScrim').onclick=function(){ showForm(false); };
+    $('pinScrim').onclick=function(){ pendingMutation=null; showPin(false); };
+    $('pickCancel').onclick=closePick;
+    $('pickScrim').onclick=closePick;
+    $('crewBtn').onclick=openCrew;
+    $('crewClose').onclick=closeCrew;
+    $('crewScrim').onclick=closeCrew;
+    $('crewAdd').onclick=addCrewMember;
+
+    // ---------- toast ----------
+    var toastTimer=null;
+    function toast(msg){ var el=$('toast'); el.textContent=msg; el.className='toast show';
+      if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.className='toast'; },4500); }
+
+    document.addEventListener('visibilitychange',function(){ if(!document.hidden) load(); });
+    load();
+
+    // First time on this device (e.g. right after scanning the QR): auto-show
+    // the "Add to Home Screen" guide so the app becomes a real icon.
+    try{
+      if(!localStorage.getItem('argSeenWelcome')){
+        localStorage.setItem('argSeenWelcome','1');
+        setTimeout(function(){ showSheet('homeScrim','homeSheet',true); }, 800);
+      }
+    }catch(e){}
+  </script>
+</body>
+</html>

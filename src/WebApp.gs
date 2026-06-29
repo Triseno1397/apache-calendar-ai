@@ -31,13 +31,49 @@ var WEB_PALETTE = [
 ];
 
 
-/** Serve the mobile web UI. */
-function doGet() {
+/**
+ * Entry point. With ?action=... it behaves as a JSON API (for the clean-URL
+ * front-end hosted off Google). With no action it serves the HTML app (so the
+ * old script.google.com URL keeps working too).
+ */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action) return handleApi(e);
   return HtmlService.createHtmlOutputFromFile('src/Index')
     .setTitle('Apache Rental — Jobs')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .addMetaTag('apple-mobile-web-app-capable', 'yes')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) { return handleApi(e); }
+
+/** JSON API dispatcher. data = JSON in the `data` param; pin in the `pin` param. */
+function handleApi(e) {
+  var p = (e && e.parameter) || {};
+  var out;
+  try {
+    var data = p.data ? JSON.parse(p.data) : null;
+    var pin = p.pin || '';
+    switch (p.action) {
+      case 'getJobs':           out = getJobs(); break;
+      case 'getReview':         out = getReview(); break;
+      case 'getCrew':           out = getCrew(); break;
+      case 'scanNow':           out = scanNow(); break;
+      case 'createJob':         out = createJob(data, pin); break;
+      case 'updateJob':         out = updateJob(data, pin); break;
+      case 'deleteJob':         out = deleteJob(data, pin); break;
+      case 'dismissReview':     out = dismissReview(data, pin); break;
+      case 'removeReviewEmail': out = removeReviewEmail(data, pin); break;
+      case 'addReviewToJob':    out = addReviewToJob(data, pin); break;
+      case 'addCrew':           out = addCrew(data, pin); break;
+      case 'removeCrew':        out = removeCrew(data, pin); break;
+      default:                  out = { __error: 'Unknown action: ' + p.action };
+    }
+  } catch (err) {
+    out = { __error: String(err && err.message ? err.message : err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 
