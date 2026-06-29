@@ -228,10 +228,14 @@
       <div><label class="fl">📦 Drop-off date</label><input class="in" type="date" id="f_dropDate"></div>
       <div><label class="fl">Time</label><input class="in" type="time" id="f_dropTime"></div>
     </div>
+    <label class="fl">📦 Drop-off location (optional)</label>
+    <input class="in" id="f_dropLoc" placeholder="Where to deliver — address / dock / room">
     <div class="two">
       <div><label class="fl">📥 Pick-up date</label><input class="in" type="date" id="f_pickDate"></div>
       <div><label class="fl">Time</label><input class="in" type="time" id="f_pickTime"></div>
     </div>
+    <label class="fl">📥 Pick-up location (optional)</label>
+    <input class="in" id="f_pickLoc" placeholder="Where to pick up from / return to">
     <label class="fl">Show dates (optional)</label>
     <input class="in" id="f_showDates" placeholder="e.g. Mar 14–16">
     <label class="fl">Tags (comma separated)</label>
@@ -242,19 +246,6 @@
       <button class="b-cancel" id="f_cancel">Cancel</button>
       <button class="b-del" id="f_delete" style="display:none">🗑️</button>
       <button class="b-save" id="f_save">Save</button>
-    </div>
-  </div>
-
-  <!-- pin -->
-  <div class="scrim" id="pinScrim"></div>
-  <div class="sheet" id="pinSheet">
-    <div class="grab"></div>
-    <h3>🔒 Edit code</h3>
-    <div class="step">Enter the team edit code to add, change, or remove jobs.</div>
-    <input class="in" id="pinInput" type="password" inputmode="text" placeholder="Edit code" style="margin-top:6px">
-    <div class="formbtns">
-      <button class="b-cancel" id="pinCancel">Cancel</button>
-      <button class="b-save" id="pinOk">Unlock</button>
     </div>
   </div>
 
@@ -279,6 +270,15 @@
     </div>
     <div id="crewList" style="margin-top:14px"></div>
     <button class="closebtn" id="crewClose">Done</button>
+  </div>
+
+  <!-- day detail (opens when you tap a date) -->
+  <div class="scrim" id="dayScrim"></div>
+  <div class="sheet" id="daySheet">
+    <div class="grab"></div>
+    <h3 id="dayTitle">Day</h3>
+    <div id="dayBody"></div>
+    <button class="closebtn" id="dayClose">Close</button>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -317,6 +317,7 @@
       return WD[parseYMD(s).getDay()];
     }
     function longDate(s){ var d=parseYMD(s); return WD[d.getDay()]+', '+MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }
+    function mdy(s){ var d=parseYMD(s); return pad(d.getMonth()+1)+'/'+pad(d.getDate())+'/'+d.getFullYear(); }
     function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function subText(n){ var t=new Date(); return n+' job'+(n===1?'':'s')+' · updated '+fmtTime(pad(t.getHours())+':'+pad(t.getMinutes())); }
     function revDate(iso){ try{ var d=new Date(iso); return MO[d.getMonth()].slice(0,3)+' '+d.getDate(); }catch(e){ return ''; } }
@@ -379,19 +380,22 @@
       var j=o.job, c=accent(j), drop=o.type==='dropoff';
       var h='<div class="card pri-'+(j.priority||'Normal')+'" style="border-left-color:'+c+'">';
       h+='<div class="row1"><div class="leftwrap">';
-      h+='<span class="chip '+(drop?'drop':'pick')+'">'+(drop?'📦 DROP OFF':'📥 PICK UP')+'</span>';
+      h+='<span class="chip '+(drop?'drop':'pick')+'">'+(drop?'📦 D/O':'📥 P/U')+'</span>';
       if(j.priority==='Urgent') h+='<span class="pri Urgent">🔴 URGENT</span>';
       else if(j.priority==='High') h+='<span class="pri High">🟠 HIGH</span>';
       else if(j.priority==='Low') h+='<span class="pri Low">LOW</span>';
       h+= o.time ? '<span class="time">'+fmtTime(o.time)+'</span>' : '<span class="time tbd">time TBD</span>';
       h+='</div><div class="acts">'+
+         (j.emailUrl ? '<button title="Open email thread" onclick="openEmail(\''+jkey(j)+'\')">✉️</button>' : '')+
          '<button title="Edit" onclick="editJob(\''+jkey(j)+'\')">✏️</button>'+
          '<button title="Remove" onclick="delJob(\''+jkey(j)+'\')">🗑️</button></div></div>';
       h+='<div class="job">'+esc(j.job||'Untitled job')+'</div>';
       if(j.venue) h+='<div class="meta"><span class="k">📍</span><span>'+esc(j.venue)+'</span></div>';
+      if(j.dropLocation) h+='<div class="meta"><span class="k">📦</span><span><b>D/O:</b> '+esc(j.dropLocation)+'</span></div>';
+      if(j.pickLocation) h+='<div class="meta"><span class="k">📥</span><span><b>P/U:</b> '+esc(j.pickLocation)+'</span></div>';
       var other = drop
-        ? (j.pickUpDate ? 'Pick-up '+longDate(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'') : 'Pick-up TBD')
-        : (j.dropOffDate? 'Drop-off '+longDate(j.dropOffDate)+(j.dropOffTime?' · '+fmtTime(j.dropOffTime):'') : 'Drop-off TBD');
+        ? (j.pickUpDate ? 'P/U '+mdy(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'') : 'P/U TBD')
+        : (j.dropOffDate? 'D/O '+mdy(j.dropOffDate)+(j.dropOffTime?' · '+fmtTime(j.dropOffTime):'') : 'D/O TBD');
       h+='<div class="meta"><span class="k">'+(drop?'📥':'📦')+'</span><span style="color:var(--muted)">'+other+'</span></div>';
       if(j.showDates) h+='<div class="meta"><span class="k">🎬</span><span>'+esc(j.showDates)+'</span></div>';
       if(j.tags&&j.tags.length){ h+='<div class="tags">'; j.tags.forEach(function(t){ h+='<span class="tag">'+esc(t)+'</span>'; }); h+='</div>'; }
@@ -474,17 +478,26 @@
           '" onclick="selDay(\''+ds+'\')"><span class="dn">'+day+'</span>'+bars+'</div>';
       }
       html+='</div>';
-      var sel=state.selDay&&byDate[state.selDay];
-      if(sel&&sel.length){
-        html+='<div class="daygroup" style="margin-top:18px"><div class="dayhdr'+(state.selDay===t?' today':'')+
-          '"><span class="rel">'+relLabel(state.selDay)+'</span><span>'+longDate(state.selDay)+'</span></div>';
-        sel.forEach(function(o){ html+=card(o); }); html+='</div>';
-      } else html+='<div class="section-title" style="justify-content:center">Tap a day to see its jobs</div>';
+      html+='<div class="section-title" style="justify-content:center">Tap a day to see its jobs</div>';
       $('main').innerHTML=html;
     }
     function moveMonth(d){ var m=state.month.m+d,y=state.month.y; if(m<0){m=11;y--;} if(m>11){m=0;y++;}
       state.month={y:y,m:m}; state.selDay=null; renderMonth(); }
-    function selDay(ds){ state.selDay=(state.selDay===ds?null:ds); renderMonth(); }
+    // Tap a date -> highlight it and pop up that day's jobs (no scrolling needed).
+    function selDay(ds){
+      state.selDay=ds; renderMonth();
+      var byDate={}; state.occ.forEach(function(o){ (byDate[o.date]=byDate[o.date]||[]).push(o); });
+      openDay(ds, byDate[ds]||[]);
+    }
+    function openDay(ds, list){
+      $('dayTitle').textContent=relLabel(ds)+' · '+mdy(ds);
+      var html='';
+      if(list && list.length){ list.forEach(function(o){ html+=card(o); }); }
+      else html='<div class="empty-state" style="padding:26px 10px"><div class="big">🗓️</div>No jobs on this day.</div>';
+      $('dayBody').innerHTML=html;
+      showSheet('dayScrim','daySheet',true);
+    }
+    function closeDay(){ showSheet('dayScrim','daySheet',false); }
 
     function renderReview(){
       if(!state.review.length) return empty('✅','Nothing needs review.','Emails the AI can’t place show up here.');
@@ -533,8 +546,10 @@
       var note='From email: '+(r.subject||'')+(r.snippet?' — '+r.snippet:'');
       mutate('addReviewToJob',{ threadId:r.id, note:note, job:{
         job:j.job, venue:j.venue, dropOffDate:j.dropOffDate, dropOffTime:j.dropOffTime,
-        pickUpDate:j.pickUpDate, pickUpTime:j.pickUpTime, showDates:j.showDates, notes:j.notes,
-        priority:j.priority, color:j.color, tags:j.tags, ref:j.ref,
+        pickUpDate:j.pickUpDate, pickUpTime:j.pickUpTime,
+        dropLocation:j.dropLocation, pickLocation:j.pickLocation,
+        showDates:j.showDates, notes:j.notes,
+        priority:j.priority, color:j.color, tags:j.tags, ref:j.ref, emailUrl:j.emailUrl,
         dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId } });
     }
     function jobSortDate(j){ return j.dropOffDate||j.pickUpDate||''; }
@@ -636,7 +651,9 @@
       $('formTitle').textContent=job?'Edit job':'Add job';
       $('f_job').value=j.job||''; $('f_venue').value=j.venue||'';
       $('f_dropDate').value=j.dropOffDate||''; $('f_dropTime').value=j.dropOffTime||'';
+      $('f_dropLoc').value=j.dropLocation||'';
       $('f_pickDate').value=j.pickUpDate||''; $('f_pickTime').value=j.pickUpTime||'';
+      $('f_pickLoc').value=j.pickLocation||'';
       $('f_showDates').value=j.showDates||''; $('f_notes').value=j.notes||'';
       $('f_tags').value=(j.tags&&j.tags.length)?j.tags.join(', '):'';
       setPriority(j.priority||'Normal');
@@ -651,9 +668,10 @@
       var d={ job:$('f_job').value.trim(), venue:$('f_venue').value.trim(),
         dropOffDate:$('f_dropDate').value||null, dropOffTime:$('f_dropTime').value||null,
         pickUpDate:$('f_pickDate').value||null, pickUpTime:$('f_pickTime').value||null,
+        dropLocation:$('f_dropLoc').value.trim(), pickLocation:$('f_pickLoc').value.trim(),
         showDates:$('f_showDates').value.trim(), notes:$('f_notes').value.trim(),
         priority:pri, color:state.selColor, tags:tags };
-      if(state.editing){ d.ref=state.editing.ref; d.dropOffEventId=state.editing.dropOffEventId; d.pickUpEventId=state.editing.pickUpEventId; }
+      if(state.editing){ d.ref=state.editing.ref; d.dropOffEventId=state.editing.dropOffEventId; d.pickUpEventId=state.editing.pickUpEventId; d.emailUrl=state.editing.emailUrl; }
       if(state.reviewThreadId) d.reviewThreadId=state.reviewThreadId;
       return d;
     }
@@ -671,22 +689,16 @@
     };
     $('f_cancel').onclick=function(){ showForm(false); };
     $('addBtn').onclick=function(){ openForm(null,null); };
-    window.editJob=function(k){ var j=findJob(k); if(j) openForm(j,null); };
+    window.editJob=function(k){ var j=findJob(k); if(j){ closeDay(); openForm(j,null); } };
     window.delJob=function(k){
       var j=findJob(k); if(!j) return;
-      if(confirm('Remove “'+(j.job||'this job')+'” from the calendar?'))
-        mutate('deleteJob', { job:j.job, ref:j.ref, dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId });
+      if(confirm('Remove “'+(j.job||'this job')+'” from the calendar?')){ closeDay();
+        mutate('deleteJob', { job:j.job, ref:j.ref, dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId }); }
     };
+    window.openEmail=function(k){ var j=findJob(k); if(j&&j.emailUrl) window.open(j.emailUrl,'_blank'); };
 
-    // ---------- mutate w/ PIN ----------
-    var pendingMutation=null;
-    function getPin(){ try{ return localStorage.getItem('argPin')||''; }catch(e){ return ''; } }
-    function setStoredPin(p){ try{ localStorage.setItem('argPin',p); }catch(e){} }
-    function mutate(fn, data){
-      var pin=getPin();
-      if(!pin){ pendingMutation={fn:fn,data:data}; showPin(true); return; }
-      runMutation(fn,data,pin);
-    }
+    // ---------- mutate (no edit code — anyone with the link can change jobs) ----------
+    function mutate(fn, data){ runMutation(fn, data, ''); }
     function runMutation(fn,data,pin){
       showForm(false);
       $('f_save').disabled=true;
@@ -696,33 +708,25 @@
         toast(res&&res.message?res.message:'Saved');
       }).withFailureHandler(function(e){
         $('f_save').disabled=false;
-        var msg=(e&&e.message)?e.message:(''+e);
-        if(/PIN|code/i.test(msg)){ setStoredPin(''); toast('Wrong edit code — try again.'); pendingMutation={fn:fn,data:data}; showPin(true); }
-        else toast('Error: '+msg);
+        toast('Error: '+((e&&e.message)?e.message:e));
       })[fn](data, pin);
     }
-    $('pinOk').onclick=function(){
-      var p=$('pinInput').value.trim(); if(!p){ return; }
-      setStoredPin(p); showPin(false);
-      if(pendingMutation){ var m=pendingMutation; pendingMutation=null; runMutation(m.fn,m.data,p); }
-    };
-    $('pinCancel').onclick=function(){ pendingMutation=null; showPin(false); };
 
     // ---------- sheet plumbing ----------
     function showSheet(scrim,sheet,on){ $(scrim).className=on?'scrim show':'scrim'; $(sheet).className=on?'sheet show':'sheet'; }
     function showForm(on){ showSheet('formScrim','formSheet',on); }
-    function showPin(on){ showSheet('pinScrim','pinSheet',on); if(on){ $('pinInput').value=''; setTimeout(function(){$('pinInput').focus();},250); } }
     $('homeBtn').onclick=function(){ showSheet('homeScrim','homeSheet',true); };
     $('homeClose').onclick=function(){ showSheet('homeScrim','homeSheet',false); };
     $('homeScrim').onclick=function(){ showSheet('homeScrim','homeSheet',false); };
     $('formScrim').onclick=function(){ showForm(false); };
-    $('pinScrim').onclick=function(){ pendingMutation=null; showPin(false); };
     $('pickCancel').onclick=closePick;
     $('pickScrim').onclick=closePick;
     $('crewBtn').onclick=openCrew;
     $('crewClose').onclick=closeCrew;
     $('crewScrim').onclick=closeCrew;
     $('crewAdd').onclick=addCrewMember;
+    $('dayClose').onclick=closeDay;
+    $('dayScrim').onclick=closeDay;
 
     // ---------- toast ----------
     var toastTimer=null;

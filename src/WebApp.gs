@@ -8,7 +8,8 @@
  *   getJobs()               -> all jobs parsed from calendar events
  *   getReview()             -> emails the AI couldn't place (Orders/Review label)
  *   scanNow()               -> run the AI pass over the inbox right now
- *   createJob/updateJob/deleteJob(data, pin) -> manual editing (PIN-gated)
+ *   createJob/updateJob/deleteJob(data, pin) -> manual editing (open by default;
+ *                                               set CONFIG.EDIT_PIN to require a code)
  *
  * Manual jobs/customizations are stored inside each event's description as
  * "Key: value" lines (Priority / Tags / Color / Ref), so the data lives with
@@ -114,11 +115,14 @@ function getJobs() {
         venue: venue,
         dropOffDate: drop.date, dropOffTime: drop.time,
         pickUpDate: pick.date,  pickUpTime: pick.time,
+        dropLocation: clean(f['Drop-off location']),
+        pickLocation: clean(f['Pick-up location']),
         showDates: clean(f['Show dates']),
         notes: clean(f['Notes']),
         priority: clean(f['Priority']) || 'Normal',
         color: clean(f['Color']),
         tags: tags ? tags.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [],
+        emailUrl: clean(f['Source email']),
         dropOffEventId: null,
         pickUpEventId: null,
         manual: ref.indexOf('m-') === 0
@@ -311,18 +315,23 @@ function createEventSimple(cal, title, dateStr, timeStr, desc, color) {
 }
 
 function buildManualDescription(d, ref) {
-  return [
+  var lines = [
     'Show: '       + (d.job || 'TBD'),
     'Venue: '      + (d.venue || 'TBD'),
     'Drop-off: '   + fmtDateTime(d.dropOffDate, d.dropOffTime),
+    'Drop-off location: ' + (d.dropLocation || 'TBD'),
     'Pick-up: '    + fmtDateTime(d.pickUpDate, d.pickUpTime),
+    'Pick-up location: '  + (d.pickLocation || 'TBD'),
     'Show dates: ' + (d.showDates || 'TBD'),
     'Notes: '      + (d.notes || 'TBD'),
     'Priority: '   + (d.priority || 'Normal'),
     'Tags: '       + ((d.tags && d.tags.length) ? d.tags.join(', ') : ''),
     'Color: '      + (d.color || ''),
     'Ref: '        + ref
-  ].join('\n');
+  ];
+  // Preserve the link back to the source email (e.g. on AI jobs edited by hand).
+  if (d.emailUrl) lines.push('', 'Source email: ' + d.emailUrl);
+  return lines.join('\n');
 }
 
 /** Map a UI hex to the nearest Google Calendar event color (fallback: job hash). */

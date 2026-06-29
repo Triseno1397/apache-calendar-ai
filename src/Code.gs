@@ -27,7 +27,7 @@ const CONFIG = {
   RUN_HOURS:    [7, 22],           // trigger hours (24h, project timezone): 7 AM & 10 PM
   MAX_THREADS_PER_RUN: 100,        // covers recent/active threads
   MAX_THREAD_CHARS: 18000,         // trim very long threads to control cost
-  EDIT_PIN:     '4545'             // code required in the web app to add/edit/delete jobs ('' = no code)
+  EDIT_PIN:     ''                 // edit code DISABLED — anyone with the link can add/edit/delete ('' = no code)
 };
 // ==============================================================
 
@@ -156,8 +156,8 @@ function callClaude(threadText) {
     'Return JSON with exactly these keys:\n' +
     '{"is_order":boolean,"confidence":"high|medium|low","job_name":string,' +
     '"venue":string|null,"drop_off_date":"YYYY-MM-DD"|null,"drop_off_time":"HH:MM"|null,' +
-    '"pickup_date":"YYYY-MM-DD"|null,"pickup_time":"HH:MM"|null,"show_dates":string|null,' +
-    '"notes":string|null}\n\n' +
+    '"drop_off_location":string|null,"pickup_date":"YYYY-MM-DD"|null,"pickup_time":"HH:MM"|null,' +
+    '"pickup_location":string|null,"show_dates":string|null,"notes":string|null}\n\n' +
     'Rules:\n' +
     '- is_order is true if this thread is a genuine equipment rental order or show booking for ' +
     'Apache Rental Group. A partial order still counts — it is an order even if the time, venue, ' +
@@ -173,9 +173,15 @@ function callClaude(threadText) {
     'the system fills that in). Missing times or venue must NOT stop you from returning the ' +
     'date(s) you do know.\n' +
     '- Use 24-hour times.\n' +
+    '- drop_off_location: where the equipment should be DELIVERED / dropped off (address, ' +
+    'building, dock, room, or venue). pickup_location: where it should be PICKED UP from / ' +
+    'returned to. Capture each ONLY if the email states it; otherwise null. They can differ ' +
+    'from each other and from the venue.\n' +
     '- confidence (high|medium|low) reflects how sure you are about the dates; it is ' +
     'informational only and does not need to be high for the order to be placed.\n' +
-    '- notes: capture delivery/dock/loading instructions, on-site contact, and special requests.';
+    '- notes: capture any other useful specifics the email states — delivery/dock/loading ' +
+    'instructions, on-site contact name + phone, equipment or quantities, PO / account number, ' +
+    'and special requests. If nothing extra is stated, return null.';
 
   var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
     method: 'post',
@@ -272,7 +278,9 @@ function buildDescription(order, thread) {
     'Show: '       + (order.job_name || 'TBD'),
     'Venue: '      + (order.venue || 'TBD'),
     'Drop-off: '   + fmtDateTime(order.drop_off_date, order.drop_off_time),
+    'Drop-off location: ' + (order.drop_off_location || 'TBD'),
     'Pick-up: '    + fmtDateTime(order.pickup_date, order.pickup_time),
+    'Pick-up location: '  + (order.pickup_location || 'TBD'),
     'Show dates: ' + (order.show_dates || 'TBD'),
     'Notes: '      + (order.notes || 'TBD'),
     '',
