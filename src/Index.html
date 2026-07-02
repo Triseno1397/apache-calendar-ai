@@ -123,19 +123,30 @@
     /* month grid */
     .monthbar{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 10px}
     .monthbar .mtitle{font-size:16px;font-weight:700}
-    .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-    .gh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding:2px 0}
-    .cell{min-height:12.2vh;background:var(--panel);border:1px solid var(--line);border-radius:9px;
-      padding:5px 3px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden}
+    .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .gh{font-size:12px;color:var(--muted);text-align:center;font-weight:700;padding:3px 0}
+    .cell{min-height:16vh;background:var(--panel);border:1px solid var(--line);border-radius:9px;
+      padding:6px 5px;display:flex;flex-direction:column;gap:3px;cursor:pointer;overflow:hidden}
     .cell.empty{background:transparent;border:none;cursor:default}
     .cell.urgent{border-color:#fca5a5;box-shadow:inset 0 0 0 1px #fca5a5}
-    .cell .dn{font-size:13px;font-weight:700;color:#334155;align-self:flex-start}
-    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;min-width:22px;height:22px;
-      display:grid;place-items:center;padding:0 5px}
+    .cell .dn{font-size:15px;font-weight:700;color:#334155;align-self:flex-start}
+    .cell.today .dn{color:#fff;background:var(--drop);border-radius:6px;min-width:24px;height:24px;
+      display:grid;place-items:center;padding:0 6px}
     .cell.sel{outline:2px solid var(--drop)}
-    .ebar{font-size:10.5px;line-height:1.65;color:#fff;border-radius:4px;padding:0 4px;white-space:nowrap;
+    .ebar{font-size:12px;line-height:1.75;color:#fff;border-radius:4px;padding:1px 5px;white-space:nowrap;
       overflow:hidden;text-overflow:ellipsis;font-weight:700}
-    .cell .more{font-size:9px;color:var(--muted);font-weight:700;padding-left:3px}
+    .cell .more{font-size:10px;color:var(--muted);font-weight:700;padding-left:3px}
+    /* desktop / wide screens: give the grid more room and taller day cells */
+    @media (min-width:768px){
+      main{max-width:960px}
+      .grid{gap:8px}
+      .cell{min-height:128px;padding:8px;border-radius:11px}
+      .gh{font-size:13px}
+      .cell .dn{font-size:17px}
+      .cell.today .dn{min-width:26px;height:26px}
+      .ebar{font-size:13px;line-height:1.9;padding:2px 7px}
+      .cell .more{font-size:11px}
+    }
 
     /* sheets / modals */
     .scrim{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:40}
@@ -242,6 +253,9 @@
     </div>
     <label class="fl">📦 Drop-off location (optional)</label>
     <input class="in" id="f_dropLoc" placeholder="Where to deliver — address / dock / room">
+    <label class="fl">🎬 Show day (optional)</label>
+    <input class="in" type="date" id="f_showDate">
+    <div class="hint" style="font-size:12px;color:var(--muted);margin:-4px 0 8px">Leave pick-up = show day for local jobs; set a later pick-up for shipped / out-of-town gear.</div>
     <div class="two">
       <div><label class="fl">📥 Pick-up date</label><input class="in" type="date" id="f_pickDate"></div>
       <div><label class="fl">Time</label><input class="in" type="time" id="f_pickTime"></div>
@@ -347,7 +361,15 @@
       var occ=[];
       jobs.forEach(function(j){
         if(j.dropOffDate) occ.push({type:'dropoff',date:j.dropOffDate,time:j.dropOffTime,job:j});
-        if(j.pickUpDate)  occ.push({type:'pickup', date:j.pickUpDate, time:j.pickUpTime, job:j});
+        // show + pick-up collapse onto one day when they match (local strike),
+        // otherwise show its own show-day marker + a separate pick-up (shipping).
+        var combined=j.showDate && j.pickUpDate && j.showDate===j.pickUpDate;
+        if(combined){
+          occ.push({type:'showpickup', date:j.pickUpDate, time:j.pickUpTime, job:j});
+        } else {
+          if(j.showDate)   occ.push({type:'show',   date:j.showDate,   time:null,         job:j});
+          if(j.pickUpDate) occ.push({type:'pickup', date:j.pickUpDate, time:j.pickUpTime, job:j});
+        }
       });
       occ.sort(function(a,b){
         if(a.date!==b.date) return a.date<b.date?-1:1;
@@ -398,9 +420,13 @@
 
     function card(o){
       var j=o.job, c=accent(j), drop=o.type==='dropoff';
+      var chip = o.type==='dropoff'    ? {cls:'drop', txt:'📦 D/O'}
+               : o.type==='show'       ? {cls:'pick', txt:'🎬 SHOW'}
+               : o.type==='showpickup' ? {cls:'pick', txt:'🎬 SHOW / P/U'}
+               :                         {cls:'pick', txt:'📥 P/U'};
       var h='<div class="card pri-'+(j.priority||'Normal')+'" style="border-left-color:'+c+'">';
       h+='<div class="row1"><div class="leftwrap">';
-      h+='<span class="chip '+(drop?'drop':'pick')+'">'+(drop?'📦 D/O':'📥 P/U')+'</span>';
+      h+='<span class="chip '+chip.cls+'">'+chip.txt+'</span>';
       if(j.priority==='Urgent') h+='<span class="pri Urgent">🔴 URGENT</span>';
       else if(j.priority==='High') h+='<span class="pri High">🟠 HIGH</span>';
       else if(j.priority==='Low') h+='<span class="pri Low">LOW</span>';
@@ -414,7 +440,8 @@
       if(j.dropLocation) h+='<div class="meta"><span class="k">📦</span><span><b>D/O:</b> '+esc(j.dropLocation)+'</span></div>';
       if(j.pickLocation) h+='<div class="meta"><span class="k">📥</span><span><b>P/U:</b> '+esc(j.pickLocation)+'</span></div>';
       var other = drop
-        ? (j.pickUpDate ? 'P/U '+mdy(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'') : 'P/U TBD')
+        ? (j.pickUpDate ? 'P/U '+mdy(j.pickUpDate)+(j.pickUpTime?' · '+fmtTime(j.pickUpTime):'')
+           : j.showDate ? 'Show '+mdy(j.showDate) : 'P/U TBD')
         : (j.dropOffDate? 'D/O '+mdy(j.dropOffDate)+(j.dropOffTime?' · '+fmtTime(j.dropOffTime):'') : 'D/O TBD');
       h+='<div class="meta"><span class="k">'+(drop?'📥':'📦')+'</span><span style="color:var(--muted)">'+other+'</span></div>';
       if(j.showDates) h+='<div class="meta"><span class="k">🎬</span><span>'+esc(j.showDates)+'</span></div>';
@@ -440,7 +467,7 @@
     }
 
     // stable key to find a job again from a click handler
-    function jkey(j){ return j.ref || (j.dropOffEventId||'') + '~' + (j.pickUpEventId||''); }
+    function jkey(j){ return j.ref || [j.dropOffEventId||'', j.showEventId||'', j.pickUpEventId||'', j.showPickUpEventId||''].join('~'); }
     function findJob(k){
       for(var i=0;i<state.jobs.length;i++){ if(jkey(state.jobs[i])===k) return state.jobs[i]; }
       return null;
@@ -581,11 +608,12 @@
       var note='From email: '+(r.subject||'')+(r.snippet?' — '+r.snippet:'');
       mutate('addReviewToJob',{ threadId:r.id, note:note, job:{
         job:j.job, venue:j.venue, dropOffDate:j.dropOffDate, dropOffTime:j.dropOffTime,
-        pickUpDate:j.pickUpDate, pickUpTime:j.pickUpTime,
+        showDate:j.showDate, pickUpDate:j.pickUpDate, pickUpTime:j.pickUpTime,
         dropLocation:j.dropLocation, pickLocation:j.pickLocation,
         showDates:j.showDates, notes:j.notes,
         priority:j.priority, color:j.color, tags:j.tags, ref:j.ref, emailUrl:j.emailUrl,
-        dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId } });
+        dropOffEventId:j.dropOffEventId, showEventId:j.showEventId,
+        pickUpEventId:j.pickUpEventId, showPickUpEventId:j.showPickUpEventId } });
     }
     function jobSortDate(j){ return j.dropOffDate||j.pickUpDate||''; }
     function openPick(){
@@ -713,6 +741,7 @@
       $('f_job').value=j.job||''; $('f_venue').value=j.venue||'';
       $('f_dropDate').value=j.dropOffDate||''; $('f_dropTime').value=j.dropOffTime||'';
       $('f_dropLoc').value=j.dropLocation||'';
+      $('f_showDate').value=j.showDate||'';
       $('f_pickDate').value=j.pickUpDate||''; $('f_pickTime').value=j.pickUpTime||'';
       $('f_pickLoc').value=j.pickLocation||'';
       $('f_showDates').value=j.showDates||''; $('f_notes').value=j.notes||'';
@@ -728,25 +757,27 @@
       var tags=$('f_tags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
       var d={ job:$('f_job').value.trim(), venue:$('f_venue').value.trim(),
         dropOffDate:$('f_dropDate').value||null, dropOffTime:$('f_dropTime').value||null,
+        showDate:$('f_showDate').value||null,
         pickUpDate:$('f_pickDate').value||null, pickUpTime:$('f_pickTime').value||null,
         dropLocation:$('f_dropLoc').value.trim(), pickLocation:$('f_pickLoc').value.trim(),
         showDates:$('f_showDates').value.trim(), notes:$('f_notes').value.trim(),
         priority:pri, color:state.selColor, tags:tags };
-      if(state.editing){ d.ref=state.editing.ref; d.dropOffEventId=state.editing.dropOffEventId; d.pickUpEventId=state.editing.pickUpEventId; d.emailUrl=state.editing.emailUrl; }
+      if(state.editing){ d.ref=state.editing.ref; d.dropOffEventId=state.editing.dropOffEventId; d.showEventId=state.editing.showEventId; d.pickUpEventId=state.editing.pickUpEventId; d.showPickUpEventId=state.editing.showPickUpEventId; d.emailUrl=state.editing.emailUrl; }
       if(state.reviewThreadId) d.reviewThreadId=state.reviewThreadId;
       return d;
     }
     $('f_save').onclick=function(){
       var d=readForm();
       if(!d.job){ toast('Add a job name.'); return; }
-      if(!d.dropOffDate && !d.pickUpDate){ toast('Add a drop-off or pick-up date.'); return; }
+      if(!d.dropOffDate && !d.pickUpDate && !d.showDate){ toast('Add a drop-off, show, or pick-up date.'); return; }
       mutate(state.editing?'updateJob':'createJob', d);
     };
     $('f_delete').onclick=function(){
       if(!state.editing) return;
       if(confirm('Remove “'+(state.editing.job||'this job')+'” from the calendar?'))
         mutate('deleteJob', { job:state.editing.job, ref:state.editing.ref,
-          dropOffEventId:state.editing.dropOffEventId, pickUpEventId:state.editing.pickUpEventId });
+          dropOffEventId:state.editing.dropOffEventId, showEventId:state.editing.showEventId,
+          pickUpEventId:state.editing.pickUpEventId, showPickUpEventId:state.editing.showPickUpEventId });
     };
     $('f_cancel').onclick=function(){ showForm(false); };
     $('addBtn').onclick=function(){ openForm(null,null); };
@@ -754,7 +785,8 @@
     window.delJob=function(k){
       var j=findJob(k); if(!j) return;
       if(confirm('Remove “'+(j.job||'this job')+'” from the calendar?')){ closeDay();
-        mutate('deleteJob', { job:j.job, ref:j.ref, dropOffEventId:j.dropOffEventId, pickUpEventId:j.pickUpEventId }); }
+        mutate('deleteJob', { job:j.job, ref:j.ref, dropOffEventId:j.dropOffEventId, showEventId:j.showEventId,
+          pickUpEventId:j.pickUpEventId, showPickUpEventId:j.showPickUpEventId }); }
     };
     window.openEmail=function(k){ var j=findJob(k); if(j&&j.emailUrl) window.open(j.emailUrl,'_blank'); };
 
@@ -790,6 +822,54 @@
     $('feedCopy').onclick=feedCopyLink;
     $('dayClose').onclick=closeDay;
     $('dayScrim').onclick=closeDay;
+
+    // ---------- swipe-down to dismiss the day popup ----------
+    // Drag the day sheet downward (from its top) to flick it closed — the Close
+    // button still works. Inner content stays scrollable: a drag only begins when
+    // the sheet is already scrolled to the top.
+    (function(){
+      var sheet=$('daySheet'), scrim=$('dayScrim');
+      if(!sheet) return;
+      var startY=0, dy=0, dragging=false, H=1;
+      function pointY(e){ return (e.touches&&e.touches[0]) ? e.touches[0].clientY : e.clientY; }
+      function start(e){
+        if(sheet.scrollTop>0) return;             // let inner scrolling win
+        dragging=true; startY=pointY(e); dy=0; H=sheet.offsetHeight||1;
+        sheet.style.transition='none';
+      }
+      function move(e){
+        if(!dragging) return;
+        dy=pointY(e)-startY;
+        if(dy<0){ dy=0; sheet.style.transform=''; if(scrim) scrim.style.opacity=''; return; }
+        if(e.cancelable) e.preventDefault();       // stop the page rubber-banding
+        sheet.style.transform='translateY('+dy+'px)';
+        if(scrim) scrim.style.opacity=String(Math.max(0,1-dy/H));
+      }
+      function end(){
+        if(!dragging) return;
+        dragging=false;
+        if(dy>Math.min(150,H*0.28)){               // dragged far enough -> dismiss
+          sheet.style.transition='transform .2s ease';
+          sheet.style.transform='translateY(100%)';
+          if(scrim){ scrim.style.transition='opacity .2s ease'; scrim.style.opacity='0'; }
+          setTimeout(function(){
+            closeDay();
+            sheet.style.transition=''; sheet.style.transform='';
+            if(scrim){ scrim.style.transition=''; scrim.style.opacity=''; }
+          },200);
+        } else {                                   // not far enough -> snap back
+          sheet.style.transition=''; sheet.style.transform='';
+          if(scrim) scrim.style.opacity='';
+        }
+      }
+      sheet.addEventListener('touchstart',start,{passive:true});
+      sheet.addEventListener('touchmove',move,{passive:false});
+      sheet.addEventListener('touchend',end);
+      sheet.addEventListener('touchcancel',end);
+      sheet.addEventListener('mousedown',start);
+      document.addEventListener('mousemove',move);
+      document.addEventListener('mouseup',end);
+    })();
 
     // ---------- toast ----------
     var toastTimer=null;

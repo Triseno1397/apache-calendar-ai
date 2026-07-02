@@ -3,9 +3,9 @@
 A Google Apps Script automation for **Apache Rental Group**. It scans the shared
 Gmail inbox **apachecalender@gmail.com** twice a day, uses the Anthropic (Claude)
 API to read each new or changed order email thread, and writes neat, color-coded
-**drop-off / pick-up** events onto that account's Google Calendar — updating
-events when threads change, never duplicating, and marking missing details as
-`TBD`.
+**drop-off / show / pick-up** events onto that account's Google Calendar — updating
+events when threads change, merging duplicates across threads, and marking missing
+details as `TBD`.
 
 It runs on Google's servers via time-based triggers, so nothing needs to stay
 open on a laptop.
@@ -17,9 +17,18 @@ open on a laptop.
 - For each labeled thread, per-thread state (in `PropertiesService`) tracks the
   message count + the event IDs it created. **Unchanged threads cost nothing** —
   Claude is only called when a thread is new or has a new reply.
-- Claude returns minified JSON (show name, venue, drop-off / pick-up date+time,
-  notes). The script creates or **updates** the matching calendar events.
-- Same job name → consistent color (drop-off + pick-up share it). Same-day
+- Claude returns minified JSON (show name, venue, drop-off / show / pick-up
+  date+time, notes). The script creates or **updates** the matching calendar events.
+- **Show day vs pick-up:** most local jobs strike and pick up on the show day, so
+  those collapse into one **`🎬 SHOW / 📥 PICK UP`** event. Shipped / out-of-town
+  jobs (gear returns days later) get a standalone **`🎬 SHOW DAY`** event plus a
+  separate **`📥 PICK UP`** event. The drop-off is always its own event. Every
+  event carries the full detail block, so clicking any one shows everything.
+- **Smart de-dup:** if two different email threads are really the same job (a
+  forward, a re-quote, a reworded subject), the script matches them on name +
+  venue + date proximity — with a quick Claude yes/no on borderline cases — then
+  merges the details into one job and removes the stray duplicate.
+- Same job name → consistent color (all of a job's events share it). Same-day
   duplicates of a job collapse onto one event.
 - As long as a thread has a **job name and at least one date** (drop-off or
   pick-up), the events go straight onto the calendar — missing times, venue, or

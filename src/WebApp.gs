@@ -95,19 +95,19 @@ function getJobs() {
 
   events.forEach(function (ev) {
     var title = ev.getTitle() || '';
-    var role = title.indexOf('📦') === 0 ? 'dropoff'
-             : title.indexOf('📥') === 0 ? 'pickup' : null;
+    var role = roleOfTitle(title);   // dropoff | show | pickup | showpickup
     if (!role) return;
 
     var f = parseEventDescription(ev.getDescription() || '');
     var drop = splitDateTime(f['Drop-off']);
     var pick = splitDateTime(f['Pick-up']);
+    var show = splitDateTime(f['Show day']);
     var job = clean(f['Show']) || stripTitle(title);
     var venue = clean(f['Venue']);
     var ref = f['Ref'] || '';
 
     var key = ref ? ('ref:' + ref)
-                  : [job, venue, drop.date, drop.time, pick.date, pick.time].join('|');
+                  : [job, venue, drop.date, drop.time, show.date, pick.date, pick.time].join('|');
 
     var j = map[key];
     if (!j) {
@@ -117,6 +117,7 @@ function getJobs() {
         job: job,
         venue: venue,
         dropOffDate: drop.date, dropOffTime: drop.time,
+        showDate: show.date,
         pickUpDate: pick.date,  pickUpTime: pick.time,
         dropLocation: clean(f['Drop-off location']),
         pickLocation: clean(f['Pick-up location']),
@@ -127,12 +128,16 @@ function getJobs() {
         tags: tags ? tags.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [],
         emailUrl: clean(f['Source email']),
         dropOffEventId: null,
+        showEventId: null,
         pickUpEventId: null,
+        showPickUpEventId: null,
         manual: ref.indexOf('m-') === 0
       };
       map[key] = j;
     }
     if (role === 'dropoff') j.dropOffEventId = ev.getId();
+    else if (role === 'show') j.showEventId = ev.getId();
+    else if (role === 'showpickup') j.showPickUpEventId = ev.getId();
     else j.pickUpEventId = ev.getId();
   });
 
@@ -198,6 +203,7 @@ function scanMessage(s) {
   if (!s.synced && !s.review && !s.errors) return 'No new jobs found.';
   var parts = [];
   if (s.synced) parts.push(s.synced + ' job' + (s.synced === 1 ? '' : 's') + ' added/updated');
+  if (s.merged) parts.push(s.merged + ' duplicate' + (s.merged === 1 ? '' : 's') + ' merged');
   if (s.review) parts.push(s.review + ' need' + (s.review === 1 ? 's' : '') + ' review');
   if (s.errors) parts.push(s.errors + ' error' + (s.errors === 1 ? '' : 's'));
   return parts.join(' · ');
@@ -219,17 +225,27 @@ function updateJob(data, pin) {
   requirePin(pin);
   var cal = getCalendar();
   var ref = data.ref || ('m-' + Utilities.getUuid());
-  writeJobEvents(cal, data, ref, { dropoff: data.dropOffEventId, pickup: data.pickUpEventId });
+  writeJobEvents(cal, data, ref, existingIds(data));
   return afterMutation('Updated: ' + (data.job || 'Untitled job'));
 }
 
 function deleteJob(data, pin) {
   requirePin(pin);
   var cal = getCalendar();
-  [data.dropOffEventId, data.pickUpEventId].forEach(function (id) {
+  [data.dropOffEventId, data.showEventId, data.pickUpEventId, data.showPickUpEventId].forEach(function (id) {
     if (id) { var ev = safeGetEvent(cal, id); if (ev) ev.deleteEvent(); }
   });
   return afterMutation('Removed: ' + (data.job || 'job'));
+}
+
+/** Map a job payload's stored event IDs to the role keys writeJobEvents expects. */
+function existingIds(d) {
+  return {
+    dropoff:    d.dropOffEventId,
+    show:       d.showEventId,
+    pickup:     d.pickUpEventId,
+    showpickup: d.showPickUpEventId
+  };
 }
 
 // ---- Needs Review actions ----
@@ -256,7 +272,7 @@ function addReviewToJob(payload, pin) {
   var d = payload.job || {};
   if (payload.note) d.notes = (d.notes ? d.notes + '\n\n' : '') + payload.note;
   var ref = d.ref || ('m-' + Utilities.getUuid());
-  writeJobEvents(cal, d, ref, { dropoff: d.dropOffEventId, pickup: d.pickUpEventId });
+  writeJobEvents(cal, d, ref, existingIds(d));
   if (payload.threadId) unflagThread(payload.threadId);
   return afterMutation('Added to “' + (d.job || 'job') + '”.');
 }
@@ -280,14 +296,19 @@ function afterMutation(msg) {
   return res;
 }
 
-/** Create or update the drop-off and pick-up events for one manual job. */
+/** Create or update every dated event a manual job needs (drop-off / show / pick-up,
+ *  with show + pick-up collapsing onto one event when they share a day). */
 function writeJobEvents(cal, d, ref, existing) {
   var desc = buildManualDescription(d, ref);
   var color = gcalColorFromHex(d.color, d.job);
-  return {
-    dropoff: writeRole(cal, 'dropoff', d.dropOffDate, d.dropOffTime, d, desc, color, existing && existing.dropoff),
-    pickup:  writeRole(cal, 'pickup',  d.pickUpDate,  d.pickUpTime,  d, desc, color, existing && existing.pickup)
-  };
+  existing = existing || {};
+  var plan = planRoles(d.dropOffDate, d.dropOffTime, d.showDate, d.pickUpDate, d.pickUpTime);
+  var out = {};
+  ALL_ROLES.forEach(function (role) {
+    var p = plan[role];
+    out[role] = writeRole(cal, role, p && p.date, p && p.time, d, desc, color, existing[role]);
+  });
+  return out;
 }
 
 function writeRole(cal, role, dateStr, timeStr, d, desc, color, existingId) {
@@ -323,6 +344,7 @@ function buildManualDescription(d, ref) {
     'Venue: '      + (d.venue || 'TBD'),
     'Drop-off: '   + fmtDateTime(d.dropOffDate, d.dropOffTime),
     'Drop-off location: ' + (d.dropLocation || 'TBD'),
+    'Show day: '   + (d.showDate || 'TBD'),
     'Pick-up: '    + fmtDateTime(d.pickUpDate, d.pickUpTime),
     'Pick-up location: '  + (d.pickLocation || 'TBD'),
     'Show dates: ' + (d.showDates || 'TBD'),
@@ -460,7 +482,7 @@ function buildIcsFeed() {
 
   cal.getEvents(start, end).forEach(function (ev) {
     var title = ev.getTitle() || '';
-    if (title.indexOf('📦') !== 0 && title.indexOf('📥') !== 0) return;  // jobs only
+    if (!roleOfTitle(title)) return;  // jobs only (drop-off / show / pick-up)
 
     out.push('BEGIN:VEVENT');
     out.push('UID:' + icsEscape(ev.getId()));
@@ -546,6 +568,8 @@ function clean(v) {
 /** Fallback when an event has no structured description. */
 function stripTitle(title) {
   var m = title.replace(/^📦\s*DROP OFF\s*[—-]\s*/, '')
+               .replace(/^🎬\s*SHOW\s*\/\s*📥\s*PICK UP\s*[—-]\s*/, '')
+               .replace(/^🎬\s*SHOW DAY\s*[—-]\s*/, '')
                .replace(/^📥\s*PICK UP\s*[—-]\s*/, '');
   var at = m.lastIndexOf(' @ ');
   return at > 0 ? m.slice(0, at).trim() : m.trim();

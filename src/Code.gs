@@ -60,8 +60,12 @@ function processOrderEmails() {
   var source = GmailApp.getUserLabelByName(CONFIG.SOURCE_LABEL);
   var cal = getCalendar();
 
+  // One in-memory snapshot of the jobs already on the calendar, so each thread
+  // can be checked against them for cross-thread duplicates without re-querying.
+  var jobIndex = buildJobIndex(cal);
+
   var threads = collectThreads(source);
-  var summary = { synced: 0, review: 0, errors: 0, scanned: threads.length };
+  var summary = { synced: 0, review: 0, errors: 0, merged: 0, scanned: threads.length };
 
   threads.forEach(function (thread) {
     var id = thread.getId();
@@ -82,7 +86,7 @@ function processOrderEmails() {
       // Only a missing name or a missing date sends a thread to Needs Review.
       var jobName = order.job_name ? String(order.job_name).trim() : '';
       var hasName = !!jobName && !/^(tbd|n\/?a|none|unknown)$/i.test(jobName);
-      var hasDate = !!(order.drop_off_date || order.pickup_date);
+      var hasDate = !!(order.drop_off_date || order.show_date || order.pickup_date);
       var placeable = order.is_order && hasName && hasDate;
 
       if (!placeable) {
@@ -94,7 +98,21 @@ function processOrderEmails() {
       }
 
       thread.removeLabel(review); // clear any prior flag now that we have dates
-      var events = syncEvents(cal, order, thread, (state && state.events) || {});
+
+      // Smart de-dup: is another thread's job actually the SAME job? If so, adopt
+      // its events, merge details (newest value wins, nothing lost), and drop any
+      // stray duplicate — instead of creating a second set of events for it.
+      var myEvents = (state && state.events) || {};
+      var dup = findDuplicateJob(cal, order, collectEventIds(myEvents), jobIndex);
+      if (dup) {
+        order = mergeOrders(dup.order, order);
+        myEvents = adoptCanonical(cal, myEvents, dup.events);
+        summary.merged++;
+        Logger.log('Duplicate job merged across threads: ' + order.job_name);
+      }
+
+      var events = syncEvents(cal, order, thread, myEvents);
+      jobIndex.push(indexEntry(order, events)); // keep later threads aware of it
       saveState(id, { msgCount: msgCount, review: false, events: events, jobName: order.job_name });
       summary.synced++;
       Logger.log('Synced: ' + order.job_name);
@@ -156,7 +174,8 @@ function callClaude(threadText) {
     'Return JSON with exactly these keys:\n' +
     '{"is_order":boolean,"confidence":"high|medium|low","job_name":string,' +
     '"venue":string|null,"drop_off_date":"YYYY-MM-DD"|null,"drop_off_time":"HH:MM"|null,' +
-    '"drop_off_location":string|null,"pickup_date":"YYYY-MM-DD"|null,"pickup_time":"HH:MM"|null,' +
+    '"drop_off_location":string|null,"show_date":"YYYY-MM-DD"|null,' +
+    '"pickup_date":"YYYY-MM-DD"|null,"pickup_time":"HH:MM"|null,' +
     '"pickup_location":string|null,"show_dates":string|null,"notes":string|null}\n\n' +
     'Rules:\n' +
     '- is_order is true if this thread is a genuine equipment rental order or show booking for ' +
@@ -177,6 +196,13 @@ function callClaude(threadText) {
     'building, dock, room, or venue). pickup_location: where it should be PICKED UP from / ' +
     'returned to. Capture each ONLY if the email states it; otherwise null. They can differ ' +
     'from each other and from the venue.\n' +
+    '- show_date: the date the SHOW / event / production itself happens (its first day if it ' +
+    'runs multiple days). pickup_date: the date the gear is actually PICKED UP / returned. For ' +
+    'most local jobs the crew strikes and picks up right when the show ends, so pickup_date ' +
+    'equals show_date — if the email gives a show day and implies a same-day/local strike, set ' +
+    'BOTH to that date. For shipped or out-of-town jobs the gear comes back days later, so ' +
+    'show_date is the show day and pickup_date is the later return date (or null if not stated ' +
+    'yet). Only set show_date if the thread actually indicates when the show is; otherwise null.\n' +
     '- confidence (high|medium|low) reflects how sure you are about the dates; it is ' +
     'informational only and does not need to be high for the order to be placed.\n' +
     '- notes: capture any other useful specifics the email states, formatted as SHORT labeled ' +
@@ -206,10 +232,46 @@ function callClaude(threadText) {
 }
 
 
-/** Create or update the drop-off and pick-up events for one order. */
+// The event roles a job can have on the calendar. show+pickup collapse into the
+// single "showpickup" role when they fall on the same day (the common local case);
+// they split into separate "show" and "pickup" roles for shipped / out-of-town jobs.
+var ALL_ROLES = ['dropoff', 'show', 'pickup', 'showpickup'];
+
+/**
+ * Decide which dated events a job needs, from its dates. Returns a map of
+ * role -> { date, time }. Drop-off is always its own event. Show + pick-up merge
+ * onto one event when they share a day; otherwise each stands alone.
+ */
+function planRoles(dropDate, dropTime, showDate, pickDate, pickTime) {
+  var plan = {};
+  if (dropDate) plan.dropoff = { date: dropDate, time: dropTime || null };
+  if (showDate && pickDate && showDate === pickDate) {
+    plan.showpickup = { date: pickDate, time: pickTime || null };   // strike/pickup on show day
+  } else {
+    if (showDate) plan.show   = { date: showDate, time: null };      // show day stands alone
+    if (pickDate) plan.pickup = { date: pickDate, time: pickTime || null };
+  }
+  return plan;
+}
+
+/** Which role an event's title represents (or null if it isn't a job event). */
+function roleOfTitle(title) {
+  title = title || '';
+  if (title.indexOf('📦') === 0) return 'dropoff';
+  if (title.indexOf('🎬') === 0) return title.indexOf('📥') > -1 ? 'showpickup' : 'show';
+  if (title.indexOf('📥') === 0) return 'pickup';
+  return null;
+}
+function isJobEvent(ev) { return !!roleOfTitle(ev.getTitle()); }
+
+/** Create or update every dated event a job needs; delete any role it no longer has. */
 function syncEvents(cal, order, thread, events) {
-  events.dropoff = syncRole(cal, 'dropoff', order.drop_off_date, order.drop_off_time, order, thread, events.dropoff);
-  events.pickup  = syncRole(cal, 'pickup',  order.pickup_date,  order.pickup_time,  order, thread, events.pickup);
+  var plan = planRoles(order.drop_off_date, order.drop_off_time,
+                       order.show_date, order.pickup_date, order.pickup_time);
+  ALL_ROLES.forEach(function (role) {
+    var p = plan[role];
+    events[role] = syncRole(cal, role, p && p.date, p && p.time, order, thread, events[role]);
+  });
   return events;
 }
 
@@ -267,10 +329,220 @@ function updateEvent(ev, title, dateStr, timeStr, desc, color) {
 }
 
 
+// ===================== SMART CROSS-THREAD DE-DUP =====================
+// Two different email threads can be about the SAME job (a forward, a reply chain
+// that split, a re-quote). We match on job name + venue + date proximity; when the
+// match is borderline we ask Claude a single yes/no to confirm. On a confirmed
+// match we adopt the existing events, merge details, and drop the stray duplicate.
+
+/** Snapshot every job already on the calendar as matchable index entries. */
+function buildJobIndex(cal) {
+  var now = new Date();
+  var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+  var end   = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+  var groups = {};
+  cal.getEvents(start, end).forEach(function (ev) {
+    var role = roleOfTitle(ev.getTitle());
+    if (!role) return;
+    var order = jobFromOneEvent(ev);
+    var key = identityKey(order);
+    if (!groups[key]) groups[key] = { order: order, events: {} };
+    groups[key].events[role] = ev.getId();
+  });
+  return Object.keys(groups).map(function (k) {
+    return indexEntry(groups[k].order, groups[k].events);
+  });
+}
+
+/** Rebuild an order object from one event's stored "Key: value" description. */
+function jobFromOneEvent(ev) {
+  var f = parseEventDescription(ev.getDescription() || '');
+  var drop = splitDateTime(f['Drop-off']);
+  var pick = splitDateTime(f['Pick-up']);
+  var show = splitDateTime(f['Show day']);
+  return {
+    is_order: true,
+    job_name: clean(f['Show']) || stripTitle(ev.getTitle() || ''),
+    venue: clean(f['Venue']),
+    drop_off_date: drop.date, drop_off_time: drop.time,
+    drop_off_location: clean(f['Drop-off location']),
+    show_date: show.date,
+    pickup_date: pick.date, pickup_time: pick.time,
+    pickup_location: clean(f['Pick-up location']),
+    show_dates: clean(f['Show dates']),
+    notes: decodeNotes(clean(f['Notes']))
+  };
+}
+
+function indexEntry(order, events) {
+  return { order: order, events: events, ids: collectEventIds(events) };
+}
+
+/** All non-empty event IDs in an events map, as a lookup set. */
+function collectEventIds(events) {
+  var ids = {};
+  if (events) Object.keys(events).forEach(function (r) { if (events[r]) ids[events[r]] = true; });
+  return ids;
+}
+
+/** A grouping key so one job's drop-off/show/pick-up events collapse to one entry. */
+function identityKey(o) {
+  return nameNorm(o.job_name) + '|' + nameNorm(o.venue) + '|' + datesOf(o).slice().sort().join(',');
+}
+function datesOf(o) { return [o.drop_off_date, o.show_date, o.pickup_date].filter(Boolean); }
+function nameNorm(s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Find an existing job that is really the SAME job as `order` (or null). */
+function findDuplicateJob(cal, order, myIds, jobIndex) {
+  var best = null, bestScore = -1, bestNeedsAI = false;
+  for (var i = 0; i < jobIndex.length; i++) {
+    var e = jobIndex[i];
+    if (sharesId(e.ids, myIds)) continue;             // that's my own event set
+    var dateHit = sharedDate(order, e.order);
+    if (dateHit === 'none') continue;                 // no shared/near date -> different job
+    var name = nameSim(order.job_name, e.order.job_name);
+    if (name < 0.34) continue;    // only a trivial word in common -> different job (the AI
+                                  // confirm below is the safety net for everything above this)
+    var score = name + (dateHit === 'exact' ? 0.2 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+      bestNeedsAI = !(name >= 0.85 && dateHit === 'exact'); // only clear matches skip the AI check
+    }
+  }
+  if (!best) return null;
+  if (bestNeedsAI && !aiSameJob(order, best.order)) return null;
+  return { order: best.order, events: best.events };
+}
+
+function sharesId(a, b) { for (var k in a) { if (b[k]) return true; } return false; }
+
+/** Token-overlap similarity of two job names (0..1), tolerant of extra words. */
+function nameSim(a, b) {
+  var na = nameNorm(a), nb = nameNorm(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  var ta = na.split(' '), tb = nb.split(' ');
+  var setB = {}; tb.forEach(function (w) { setB[w] = true; });
+  var inter = 0, seen = {};
+  ta.forEach(function (w) { if (setB[w] && !seen[w]) { inter++; seen[w] = true; } });
+  var uniq = {}; ta.concat(tb).forEach(function (w) { uniq[w] = true; });
+  var jac = inter / Object.keys(uniq).length;
+  var contain = (na.indexOf(nb) > -1 || nb.indexOf(na) > -1) ? 0.85 : 0;
+  return Math.max(jac, contain);
+}
+
+/** 'exact' if any two dates coincide, 'close' if within 2 days, else 'none'. */
+function sharedDate(a, b) {
+  var da = datesOf(a), db = datesOf(b), close = false;
+  for (var i = 0; i < da.length; i++) {
+    for (var j = 0; j < db.length; j++) {
+      var diff = Math.abs(dayDiff(da[i], db[j]));
+      if (diff === 0) return 'exact';
+      if (diff <= 2) close = true;
+    }
+  }
+  return close ? 'close' : 'none';
+}
+function dayDiff(d1, d2) {
+  return Math.round((parseLocalDate(d1).getTime() - parseLocalDate(d2).getTime()) / 86400000);
+}
+
+/** Single cheap Claude yes/no: are these two jobs the same real job? */
+function aiSameJob(a, b) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return false;   // can't confirm -> don't merge (safer than a wrong merge)
+  function line(o) {
+    return 'name="' + (o.job_name || '') + '", venue="' + (o.venue || '') +
+           '", drop-off=' + (o.drop_off_date || '-') + ', show=' + (o.show_date || '-') +
+           ', pickup=' + (o.pickup_date || '-');
+  }
+  var user =
+    'Two broadcast-equipment rental jobs came from different email threads. Are they the SAME ' +
+    'real job (same production / booking), just described differently — as opposed to two ' +
+    'different jobs that merely look similar? Weigh the name wording, venue, and dates together.\n' +
+    'JOB A: ' + line(a) + '\nJOB B: ' + line(b) + '\n' +
+    'Return ONLY minified JSON: {"same_job":true|false}.';
+  try {
+    var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: CONFIG.MODEL, max_tokens: 64,
+        messages: [{ role: 'user', content: user }]
+      }),
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return false;
+    var data = JSON.parse(res.getContentText());
+    var out = data.content.filter(function (x) { return x.type === 'text'; })
+                          .map(function (x) { return x.text; }).join('')
+                          .replace(/```json|```/g, '').trim();
+    return !!JSON.parse(out).same_job;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Merge two versions of the same job: the newest (incoming) wins per field; gaps
+ *  fall back to the existing value; notes are unioned so nothing is lost. */
+function mergeOrders(existing, incoming) {
+  function pick(a, b) { return (a !== null && a !== undefined && a !== '') ? a : b; }
+  return {
+    is_order: true,
+    confidence: incoming.confidence || existing.confidence,
+    job_name: pick(incoming.job_name, existing.job_name),
+    venue: pick(incoming.venue, existing.venue),
+    drop_off_date: pick(incoming.drop_off_date, existing.drop_off_date),
+    drop_off_time: pick(incoming.drop_off_time, existing.drop_off_time),
+    drop_off_location: pick(incoming.drop_off_location, existing.drop_off_location),
+    show_date: pick(incoming.show_date, existing.show_date),
+    pickup_date: pick(incoming.pickup_date, existing.pickup_date),
+    pickup_time: pick(incoming.pickup_time, existing.pickup_time),
+    pickup_location: pick(incoming.pickup_location, existing.pickup_location),
+    show_dates: pick(incoming.show_dates, existing.show_dates),
+    notes: mergeNotes(existing.notes, incoming.notes)
+  };
+}
+function mergeNotes(a, b) {
+  var lines = [], seen = {};
+  [a, b].forEach(function (block) {
+    String(block == null ? '' : block).split(/\r?\n/).forEach(function (ln) {
+      var t = ln.trim(); if (!t) return;
+      var key = t.toLowerCase();
+      if (!seen[key]) { seen[key] = true; lines.push(t); }
+    });
+  });
+  return lines.join('\n');
+}
+
+/** Take over the duplicate's canonical events; delete any stray events I made. */
+function adoptCanonical(cal, myEvents, dupEvents) {
+  var keep = collectEventIds(dupEvents);
+  if (myEvents) {
+    Object.keys(myEvents).forEach(function (r) {
+      var id = myEvents[r];
+      if (id && !keep[id]) { var e = safeGetEvent(cal, id); if (e) e.deleteEvent(); }
+    });
+  }
+  var out = {};
+  Object.keys(dupEvents).forEach(function (r) { out[r] = dupEvents[r]; });
+  return out;
+}
+
+
 // ----- formatting & helpers -----
 
+var ROLE_LABELS = {
+  dropoff:    '📦 DROP OFF',
+  show:       '🎬 SHOW DAY',
+  pickup:     '📥 PICK UP',
+  showpickup: '🎬 SHOW / 📥 PICK UP'
+};
 function buildTitle(role, order) {
-  var label = role === 'dropoff' ? '📦 DROP OFF' : '📥 PICK UP';
+  var label = ROLE_LABELS[role] || ROLE_LABELS.pickup;
   return label + ' — ' + (order.job_name || 'TBD') + ' @ ' + (order.venue || 'TBD');
 }
 
@@ -281,6 +553,7 @@ function buildDescription(order, thread) {
     'Venue: '      + (order.venue || 'TBD'),
     'Drop-off: '   + fmtDateTime(order.drop_off_date, order.drop_off_time),
     'Drop-off location: ' + (order.drop_off_location || 'TBD'),
+    'Show day: '   + (order.show_date || 'TBD'),
     'Pick-up: '    + fmtDateTime(order.pickup_date, order.pickup_time),
     'Pick-up location: '  + (order.pickup_location || 'TBD'),
     'Show dates: ' + (order.show_dates || 'TBD'),
